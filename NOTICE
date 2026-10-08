@@ -1,0 +1,10 @@
+RecSys Platform reconstruction
+
+This repository reconstructs source distributed in the RecSys-MLops archive at
+source revision 6bd6e99f481f2a8d5886d6f0e8356540dc20e135. Reconstructed or modified
+upstream files are preserved with their applicable attribution; this notice does
+not assign upstream authorship to the repository owner.
+
+The vendored kagent protocol definitions under
+apps/agentic/llm_ab_router/vendor/kagent originate from kagent revision
+e6df917e9fa8 and remain subject to the accompanying Apache License 2.0.
