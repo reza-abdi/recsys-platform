@@ -1,0 +1,8 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+tfplan*
+.terraform.tfstate.lock.info
+terraform.tfvars
