@@ -1,1 +1,3 @@
-"""Realtime synthetic-event generation contracts."""
+from streaming.config import StreamGeneratorConfig, StreamSectionConfig
+
+__all__ = ["StreamGeneratorConfig", "StreamSectionConfig"]
