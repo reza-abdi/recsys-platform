@@ -1,0 +1,125 @@
+from __future__ import annotations
+
+from typing import Any
+
+from features.spark.session import read_iceberg_table, read_parquet_table, write_iceberg_table
+from lakehouse.iceberg import (
+    IcebergCatalogConfig,
+    RAW_GENERATOR_TABLES,
+    SILVER_LAKEHOUSE_TABLES,
+    create_spark_namespace,
+)
+
+
+SUPPORTED_BEHAVIOR_SCHEMA_VERSION = 2
+
+
+def _normalize_optional_column(frame: Any, column: str, default_expression: Any):
+    from pyspark.sql import functions as F
+
+    if column not in frame.columns:
+        return frame.withColumn(column, default_expression)
+    return frame.withColumn(column, F.coalesce(F.col(column), default_expression))
+
+
+def build_clean_behavior_events(events: Any) -> tuple[Any, Any]:
+    from pyspark.sql import functions as F
+
+    normalized = _normalize_optional_column(events, "device_type", F.lit("unknown"))
+    normalized = _normalize_optional_column(normalized, "campaign_id", F.lit("none"))
+    normalized = _normalize_optional_column(normalized, "schema_version", F.lit(1).cast("smallint"))
+    normalized = normalized.withColumn("event_timestamp", F.to_timestamp("event_timestamp"))
+    normalized = normalized.withColumn("ingestion_ts", F.to_timestamp("ingestion_ts"))
+    normalized = normalized.withColumn(
+        "event_type_id",
+        F.when(F.col("event_type") == "view", F.lit(1))
+        .when(F.col("event_type") == "cart", F.lit(2))
+        .when(F.col("event_type") == "purchase", F.lit(3))
+        .otherwise(F.lit(0))
+        .cast("smallint"),
+    )
+    unsupported = normalized.filter(F.col("schema_version") > F.lit(SUPPORTED_BEHAVIOR_SCHEMA_VERSION)).withColumn(
+        "rejection_reason", F.lit("unsupported_schema_version")
+    )
+    supported = normalized.filter(F.col("schema_version") <= F.lit(SUPPORTED_BEHAVIOR_SCHEMA_VERSION))
+    clean = supported.dropDuplicates(["event_id"])
+    return clean, unsupported
+
+
+def build_clean_impressions(impressions: Any) -> Any:
+    from pyspark.sql import functions as F
+
+    return (
+        impressions.withColumn("impression_timestamp", F.to_timestamp("impression_timestamp"))
+        .dropDuplicates(["impression_id"])
+        .orderBy("impression_timestamp", "impression_id")
+    )
+
+
+def build_clean_recommendation_requests(requests: Any) -> Any:
+    from pyspark.sql import functions as F
+
+    frame = _normalize_optional_column(requests, "request_context", F.lit("{}"))
+    return frame.withColumn("request_timestamp", F.to_timestamp("request_timestamp"))
+
+
+def build_product_scd(product_snapshots: Any, products: Any) -> Any:
+    from pyspark.sql import functions as F
+
+    if "valid_from" in product_snapshots.columns:
+        return product_snapshots.withColumn("valid_from", F.to_timestamp("valid_from")).orderBy("product_id", "valid_from")
+    return (
+        products.withColumn("valid_from", F.to_timestamp("created_ts"))
+        .withColumn("valid_to", F.lit(None).cast("timestamp"))
+        .orderBy("product_id", "valid_from")
+    )
+
+
+def read_raw_parquet_tables(spark: Any, run_path: str) -> dict[str, Any]:
+    return {table: read_parquet_table(spark, run_path, table) for table in RAW_GENERATOR_TABLES}
+
+
+def read_raw_lakehouse_tables(spark: Any, catalog: IcebergCatalogConfig) -> dict[str, Any]:
+    return {table: read_iceberg_table(spark, catalog.bronze_table(table)) for table in RAW_GENERATOR_TABLES}
+
+
+def read_silver_lakehouse_tables(spark: Any, catalog: IcebergCatalogConfig) -> dict[str, Any]:
+    """Read the curated DP2 outputs without rebuilding them from Bronze."""
+    return {
+        table: read_iceberg_table(spark, catalog.lakehouse_table(f"silver_{table}"))
+        for table in SILVER_LAKEHOUSE_TABLES
+    }
+
+
+def build_silver_tables_from_raw(raw: dict[str, Any], catalog: IcebergCatalogConfig) -> dict[str, Any]:
+    clean_events, rejected_events = build_clean_behavior_events(raw["behavior_events"])
+    silver = {
+        "clean_behavior_events": clean_events,
+        "rejected_behavior_events": rejected_events,
+        "clean_impressions": build_clean_impressions(raw["impressions"]),
+        "clean_recommendation_requests": build_clean_recommendation_requests(raw["recommendation_requests"]),
+        "product_scd": build_product_scd(raw["product_snapshots"], raw["products"]),
+        "users": raw["users"],
+        "products": raw["products"],
+        "user_preferences": raw["user_preferences"],
+    }
+    for name, frame in silver.items():
+        write_iceberg_table(frame, catalog.lakehouse_table(f"silver_{name}"), mode="overwrite")
+    return silver
+
+
+def build_silver_tables(
+    spark: Any,
+    run_path: str | None = None,
+    catalog: IcebergCatalogConfig | None = None,
+    source: str = "lakehouse",
+) -> dict[str, Any]:
+    catalog = catalog or IcebergCatalogConfig()
+    create_spark_namespace(spark, catalog)
+    if source == "parquet":
+        if run_path is None:
+            raise ValueError("run_path is required when Spark batch source is parquet")
+        raw = read_raw_parquet_tables(spark, run_path)
+    else:
+        raw = read_raw_lakehouse_tables(spark, catalog)
+    return build_silver_tables_from_raw(raw, catalog)
