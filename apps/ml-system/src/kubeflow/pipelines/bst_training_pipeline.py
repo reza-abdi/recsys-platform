@@ -1,0 +1,472 @@
+import os
+
+from kfp import dsl
+
+from kubeflow.components.runtime import (
+    DEFAULT_PVC_MOUNT_PATH,
+    DEFAULT_PVC_NAME,
+    DEFAULT_RUNTIME_SECRET_NAME,
+    SECRET_KEY_TO_ENV,
+    wire_runtime,
+)
+
+
+PIPELINE_IMAGE = os.getenv("RECSYS_PIPELINE_IMAGE", "registry.example.invalid/recsys/recsys-mlops-training:required")
+RAY_IMAGE = os.getenv("RECSYS_RAY_IMAGE", PIPELINE_IMAGE)
+SPARK_IMAGE = os.getenv(
+    "RECSYS_SPARK_ML_IMAGE",
+    "registry.example.invalid/recsys/recsys-spark-ml:required",
+)
+
+
+@dsl.container_component
+def prepare_training_data(
+    dataset_run_id: str,
+    feature_source: str,
+    offline_feature_table: str,
+    entity_input_path: str,
+    output_dir: str,
+    max_history_len: int,
+    dataset_metadata_path: str,
+    feast_repo_path: str,
+    feast_offline_root: str,
+    feature_service_name: str,
+    iceberg_catalog_name: str,
+    iceberg_warehouse: str,
+    hudi_catalog_name: str,
+    hudi_warehouse: str,
+    hudi_table: str,
+):
+    return dsl.ContainerSpec(
+        image=SPARK_IMAGE,
+        command=["/opt/venv/bin/python"],
+        args=[
+            "/opt/recsys/apps/ml-system/src/cli/prepare_bst_training_data.py",
+            "--feature-source",
+            feature_source,
+            "--dataset-run-id",
+            dataset_run_id,
+            "--entity-input-path",
+            entity_input_path,
+            "--feast-repo-path",
+            feast_repo_path,
+            "--feast-offline-root",
+            feast_offline_root,
+            "--skip-feast-apply",
+            "--offline-feature-table",
+            offline_feature_table,
+            "--output-dir",
+            output_dir,
+            "--max-history-len",
+            max_history_len,
+            "--feature-service-name",
+            feature_service_name,
+            "--hudi-enabled",
+            "true",
+            "--hudi-catalog-name",
+            hudi_catalog_name,
+            "--hudi-warehouse",
+            hudi_warehouse,
+            "--hudi-table",
+            hudi_table,
+            "--iceberg-catalog-name",
+            iceberg_catalog_name,
+            "--iceberg-warehouse",
+            iceberg_warehouse,
+            "--dataset-metadata-path",
+            dataset_metadata_path,
+        ],
+    )
+
+
+@dsl.container_component
+def create_hudi_savepoint(dataset_metadata_path: str):
+    return dsl.ContainerSpec(
+        image=SPARK_IMAGE,
+        command=["/opt/venv/bin/python"],
+        args=[
+            "/opt/recsys/apps/ml-system/src/cli/create_hudi_savepoint.py",
+            "--dataset-metadata-path",
+            dataset_metadata_path,
+        ],
+    )
+
+
+@dsl.container_component
+def submit_rayjob(
+    pipeline_run_id: str,
+    namespace: str,
+    job_name: str,
+    job_mode: str,
+    image: str,
+    pvc_name: str,
+    runtime_secret_name: str,
+    split_dir: str,
+    ray_output_dir: str,
+    best_result_path: str,
+    tune_result_path: str,
+    training_percent: float,
+    num_epochs: int,
+    max_trials: int,
+    parallel_trials: int,
+    cpus_per_trial: float,
+    gpus_per_trial: float,
+    worker_replicas: int,
+    num_workers: int,
+    head_ray_num_cpus: str,
+    node_selector: str,
+    toleration: str,
+    use_gpu: bool,
+    gpu_limit: int,
+    status_path: str,
+    dataset_metadata_path: str,
+    ttl_seconds_after_finished: int,
+):
+    return dsl.ContainerSpec(
+        image=PIPELINE_IMAGE,
+        command=["python", "/opt/recsys/apps/ml-system/src/cli/submit_ray_job.py"],
+        args=[
+            "--pipeline-run-id",
+            pipeline_run_id,
+            "--namespace",
+            namespace,
+            "--job-name",
+            job_name,
+            "--job-mode",
+            job_mode,
+            "--image",
+            image,
+            "--pvc-name",
+            pvc_name,
+            "--runtime-secret-name",
+            runtime_secret_name,
+            "--split-dir",
+            split_dir,
+            "--ray-output-dir",
+            ray_output_dir,
+            "--best-result-path",
+            best_result_path,
+            "--tune-result-path",
+            tune_result_path,
+            "--training-percent",
+            training_percent,
+            "--num-epochs",
+            num_epochs,
+            "--max-trials",
+            max_trials,
+            "--parallel-trials",
+            parallel_trials,
+            "--cpus-per-trial",
+            cpus_per_trial,
+            "--gpus-per-trial",
+            gpus_per_trial,
+            "--worker-replicas",
+            worker_replicas,
+            "--num-workers",
+            num_workers,
+            "--head-ray-num-cpus",
+            head_ray_num_cpus,
+            "--node-selector",
+            node_selector,
+            "--toleration",
+            toleration,
+            "--use-gpu-value",
+            use_gpu,
+            "--gpu-limit",
+            gpu_limit,
+            "--status-path",
+            status_path,
+            "--dataset-metadata-path",
+            dataset_metadata_path,
+            "--ttl-seconds-after-finished",
+            ttl_seconds_after_finished,
+        ],
+    )
+
+
+@dsl.container_component
+def evaluate_bst(config_path: str, ray_result_path: str, metrics_path: str, dataset_metadata_path: str):
+    return dsl.ContainerSpec(
+        image=PIPELINE_IMAGE,
+        command=["python", "/opt/recsys/apps/ml-system/src/cli/evaluate_ray_best_bst.py"],
+        args=[
+            "--config-path",
+            config_path,
+            "--ray-result-path",
+            ray_result_path,
+            "--split",
+            "test",
+            "--metrics-path",
+            metrics_path,
+            "--dataset-metadata-path",
+            dataset_metadata_path,
+        ],
+    )
+
+
+@dsl.container_component
+def promote_bst_model(
+    config_path: str,
+    ray_result_path: str,
+    eval_metrics_path: str,
+    output_dir: str,
+    manifest_path: str,
+    metric_name: str,
+):
+    return dsl.ContainerSpec(
+        image=PIPELINE_IMAGE,
+        command=["python", "/opt/recsys/apps/ml-system/src/registry/model_promotion.py"],
+        args=[
+            "--config-path",
+            config_path,
+            "--ray-result-path",
+            ray_result_path,
+            "--eval-metrics-path",
+            eval_metrics_path,
+            "--output-dir",
+            output_dir,
+            "--manifest-path",
+            manifest_path,
+            "--metric-name",
+            metric_name,
+        ],
+    )
+
+
+@dsl.container_component
+def trigger_kserve_model_cd(
+    manifest_path: str,
+    score_threshold: float,
+    metric_name: str,
+    jenkins_url: str,
+    job_name: str,
+    status_path: str,
+):
+    return dsl.ContainerSpec(
+        image=PIPELINE_IMAGE,
+        command=["python", "/opt/recsys/apps/ml-system/src/cli/trigger_kserve_cd.py"],
+        args=[
+            "--manifest-path",
+            manifest_path,
+            "--score-threshold",
+            score_threshold,
+            "--metric-name",
+            metric_name,
+            "--jenkins-url",
+            jenkins_url,
+            "--job-name",
+            job_name,
+            "--status-path",
+            status_path,
+            "--wait",
+        ],
+    )
+
+
+@dsl.pipeline(
+    name="recsys-bst-feature-train-evaluate",
+    description="Feature engineering, BST training, evaluation, MLflow tracking, MinIO artifacts, and Postgres model config.",
+)
+def recsys_bst_pipeline(
+    pipeline_run_id: str = "manual",
+    bst_config_path: str = "configs/ml-system/training/bst.yaml",
+    feature_source: str = "feast",
+    offline_feature_table: str = "recsys_features.feature_store.ml_bst_training",
+    entity_input_path: str = "postgresql://feature-postgres.recsys-dataflow.svc.cluster.local:5432/feature_store/feature_store.ml_ranking_labels",
+    split_output_dir: str = "/workspace/recsys/data_platform/output/ml/bst_split",
+    dataset_metadata_path: str = "/workspace/recsys/data_platform/output/ml/bst_split/dataset_version_meta.json",
+    ray_output_dir: str = "/workspace/recsys/data_platform/output/ml/ray",
+    ray_tune_result_path: str = "/workspace/recsys/data_platform/output/ml/ray/tune_result.json",
+    ray_best_result_path: str = "/workspace/recsys/data_platform/output/ml/ray/best_result.json",
+    ray_status_path: str = "/workspace/recsys/data_platform/output/ml/ray/rayjob_status.json",
+    ray_train_status_path: str = "/workspace/recsys/data_platform/output/ml/ray/rayjob_ddp_status.json",
+    eval_metrics_path: str = "/workspace/recsys/data_platform/output/ml/eval_metrics.json",
+    serving_output_dir: str = "/workspace/recsys/data_platform/output/ml/serving",
+    promotion_manifest_path: str = "/workspace/recsys/data_platform/output/ml/serving/promotion_manifest.json",
+    promotion_metric_name: str = "test_ndcg_at_10",
+    kserve_cd_score_threshold: float = 0.05,
+    kserve_cd_jenkins_url: str = "http://recsys-jenkins.ci.svc.cluster.local:8080",
+    kserve_cd_job_name: str = "RecSys-KServe-Model-CD",
+    kserve_cd_status_path: str = "/workspace/recsys/data_platform/output/ml/serving/kserve_cd_status.json",
+    pvc_name: str = "recsys-mlops-pvc",
+    pvc_mount_path: str = "/workspace",
+    runtime_secret_name: str = "recsys-mlops-runtime",
+    ray_namespace: str = "kubeflow",
+    ray_job_name: str = "recsys-bst-ray-tune",
+    ray_train_job_name: str = "recsys-bst-ray-ddp-train",
+    ray_image: str = RAY_IMAGE,
+    feature_service_name: str = "bst_ranking_v1",
+    feast_repo_path: str = "/opt/recsys/apps/data-platform/feature-store/feature_repo",
+    feast_offline_root: str = "",
+    iceberg_catalog_name: str = "recsys_features",
+    iceberg_warehouse: str = "s3a://recsys-offline-feature-store/warehouse",
+    hudi_catalog_name: str = "recsys_features",
+    hudi_warehouse: str = "s3a://recsys-offline-feature-store/warehouse",
+    hudi_table: str = "ml.bst_samples_native_v2",
+    max_history_len: int = 50,
+    training_percent: float = 1.0,
+    num_epochs: int = 1,
+    max_trials: int = 2,
+    parallel_trials: int = 1,
+    cpus_per_trial: float = 1.0,
+    gpus_per_trial: float = 0.0,
+    worker_replicas: int = 1,
+    distributed_training_percent: float = 1.0,
+    distributed_num_epochs: int = 1,
+    distributed_worker_replicas: int = 2,
+    distributed_num_workers: int = 2,
+    head_ray_num_cpus: str = "1",
+    ray_node_selector: str = "recsys.ai/pool=ml-system",
+    ray_toleration: str = "recsys.ai/workload:ml-system:NoSchedule",
+    ray_ttl_seconds_after_finished: int = 60,
+    use_gpu: bool = False,
+    gpu_limit: int = 1,
+):
+    prepare = wire_runtime(
+        prepare_training_data(
+            dataset_run_id=pipeline_run_id,
+            feature_source=feature_source,
+            offline_feature_table=offline_feature_table,
+            entity_input_path=entity_input_path,
+            output_dir=split_output_dir,
+            max_history_len=max_history_len,
+            dataset_metadata_path=dataset_metadata_path,
+            feast_repo_path=feast_repo_path,
+            feast_offline_root=feast_offline_root,
+            feature_service_name=feature_service_name,
+            iceberg_catalog_name=iceberg_catalog_name,
+            iceberg_warehouse=iceberg_warehouse,
+            hudi_catalog_name=hudi_catalog_name,
+            hudi_warehouse=hudi_warehouse,
+            hudi_table=hudi_table,
+        ),
+        pvc_name=DEFAULT_PVC_NAME,
+        mount_path=DEFAULT_PVC_MOUNT_PATH,
+        secret_name=DEFAULT_RUNTIME_SECRET_NAME,
+    )
+    prepare.set_display_name("Prepare versioned Hudi dataset")
+    prepare.set_retry(
+        num_retries=3,
+        backoff_duration="30s",
+        backoff_factor=2.0,
+        backoff_max_duration="5m",
+    )
+    tune_train = wire_runtime(
+        submit_rayjob(
+            pipeline_run_id=pipeline_run_id,
+            namespace=ray_namespace,
+            job_name=ray_job_name,
+            job_mode="tune",
+            image=ray_image,
+            pvc_name=pvc_name,
+            runtime_secret_name=runtime_secret_name,
+            split_dir=split_output_dir,
+            ray_output_dir=ray_output_dir,
+            best_result_path=ray_tune_result_path,
+            tune_result_path=ray_tune_result_path,
+            training_percent=training_percent,
+            num_epochs=num_epochs,
+            max_trials=max_trials,
+            parallel_trials=parallel_trials,
+            cpus_per_trial=cpus_per_trial,
+            gpus_per_trial=gpus_per_trial,
+            worker_replicas=worker_replicas,
+            num_workers=worker_replicas,
+            head_ray_num_cpus=head_ray_num_cpus,
+            node_selector=ray_node_selector,
+            toleration=ray_toleration,
+            use_gpu=use_gpu,
+            gpu_limit=gpu_limit,
+            status_path=ray_status_path,
+            dataset_metadata_path=dataset_metadata_path,
+            ttl_seconds_after_finished=ray_ttl_seconds_after_finished,
+        ),
+        pvc_name=DEFAULT_PVC_NAME,
+        mount_path=DEFAULT_PVC_MOUNT_PATH,
+        secret_name=DEFAULT_RUNTIME_SECRET_NAME,
+    )
+    tune_train.set_display_name("Hyperparameter tuning")
+    tune_train.after(prepare)
+    distributed_train = wire_runtime(
+        submit_rayjob(
+            pipeline_run_id=pipeline_run_id,
+            namespace=ray_namespace,
+            job_name=ray_train_job_name,
+            job_mode="distributed-train",
+            image=ray_image,
+            pvc_name=pvc_name,
+            runtime_secret_name=runtime_secret_name,
+            split_dir=split_output_dir,
+            ray_output_dir=ray_output_dir,
+            best_result_path=ray_best_result_path,
+            tune_result_path=ray_tune_result_path,
+            training_percent=distributed_training_percent,
+            num_epochs=distributed_num_epochs,
+            max_trials=1,
+            parallel_trials=1,
+            cpus_per_trial=cpus_per_trial,
+            gpus_per_trial=gpus_per_trial,
+            worker_replicas=distributed_worker_replicas,
+            num_workers=distributed_num_workers,
+            head_ray_num_cpus=head_ray_num_cpus,
+            node_selector=ray_node_selector,
+            toleration=ray_toleration,
+            use_gpu=use_gpu,
+            gpu_limit=gpu_limit,
+            status_path=ray_train_status_path,
+            dataset_metadata_path=dataset_metadata_path,
+            ttl_seconds_after_finished=ray_ttl_seconds_after_finished,
+        ),
+        pvc_name=DEFAULT_PVC_NAME,
+        mount_path=DEFAULT_PVC_MOUNT_PATH,
+        secret_name=DEFAULT_RUNTIME_SECRET_NAME,
+    )
+    distributed_train.set_display_name("Distributed training")
+    distributed_train.after(tune_train)
+    evaluate = wire_runtime(
+        evaluate_bst(
+            config_path=bst_config_path,
+            ray_result_path=ray_best_result_path,
+            metrics_path=eval_metrics_path,
+            dataset_metadata_path=dataset_metadata_path,
+        ),
+        pvc_name=DEFAULT_PVC_NAME,
+        mount_path=DEFAULT_PVC_MOUNT_PATH,
+        secret_name=DEFAULT_RUNTIME_SECRET_NAME,
+    ).after(distributed_train)
+    savepoint = wire_runtime(
+        create_hudi_savepoint(dataset_metadata_path=dataset_metadata_path),
+        pvc_name=DEFAULT_PVC_NAME,
+        mount_path=DEFAULT_PVC_MOUNT_PATH,
+        secret_name=DEFAULT_RUNTIME_SECRET_NAME,
+    ).after(evaluate)
+    savepoint.set_display_name("Protect Hudi dataset version")
+    promote = wire_runtime(
+        promote_bst_model(
+            config_path=bst_config_path,
+            ray_result_path=ray_best_result_path,
+            eval_metrics_path=eval_metrics_path,
+            output_dir=serving_output_dir,
+            manifest_path=promotion_manifest_path,
+            metric_name=promotion_metric_name,
+        ),
+        pvc_name=DEFAULT_PVC_NAME,
+        mount_path=DEFAULT_PVC_MOUNT_PATH,
+        secret_name=DEFAULT_RUNTIME_SECRET_NAME,
+    ).after(savepoint)
+    handoff = wire_runtime(
+        trigger_kserve_model_cd(
+            manifest_path=promotion_manifest_path,
+            score_threshold=kserve_cd_score_threshold,
+            metric_name=promotion_metric_name,
+            jenkins_url=kserve_cd_jenkins_url,
+            job_name=kserve_cd_job_name,
+            status_path=kserve_cd_status_path,
+        ),
+        pvc_name=DEFAULT_PVC_NAME,
+        mount_path=DEFAULT_PVC_MOUNT_PATH,
+        secret_name=DEFAULT_RUNTIME_SECRET_NAME,
+        secret_key_to_env=SECRET_KEY_TO_ENV,
+    )
+    handoff.set_display_name("Bootstrap Or Await Candidate")
+    handoff.after(promote)
