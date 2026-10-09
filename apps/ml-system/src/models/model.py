@@ -851,3 +851,221 @@ class LightTransformerEncoder(nn.Module):
         if not output_all_encoded_layers:
             all_encoder_layers.append(hidden_states)
         return all_encoder_layers
+
+
+class PositionalEncoding(nn.Module):
+
+    def __init__(self, d_model: int) -> None:
+        super().__init__()
+        self.d_model = d_model
+    def get_pe(self, seq_len: int) -> torch.Tensor:
+        # Create a matrix of shape (seq_len, d_model)
+        pe = torch.zeros(seq_len, self.d_model)
+        # Create a vector of shape (seq_len)
+        position = torch.arange(0, seq_len, dtype=torch.float).unsqueeze(1) # (seq_len, 1)
+        # Create a vector of shape (d_model)
+        div_term = torch.exp(torch.arange(0, self.d_model, 2).float() * (-math.log(10000.0) / self.d_model)) # (d_model / 2)
+        # Apply sine to even indices
+        pe[:, 0::2] = torch.sin(position * div_term) # sin(position * (10000 ** (2i / d_model))
+        # Apply cosine to odd indices
+        pe[:, 1::2] = torch.cos(position * div_term) # cos(position * (10000 ** (2i / d_model))
+        # Add a batch dimension to the positional encoding
+        pe = pe.unsqueeze(0) # (1, seq_len, d_model)
+        return pe
+
+    def forward(self, x):
+        # x is of shape (batch, seq_len, d_model)
+        seq_len = x.size(1)
+        pe = self.get_pe(seq_len).to(x.device)
+
+        x = x + pe
+        return x
+
+
+
+class BST(nn.Module):
+    def __init__(self, model_args):
+        super(BST, self).__init__()
+        self.model_args = model_args
+        self.embed_dim = self.model_args["embed_dim"]
+        self.padding_idx = self.model_args["padding_idx"]
+
+        self.item_id_embed = nn.Embedding(
+            self.model_args["item_num"],
+            self.embed_dim,
+            padding_idx=self.padding_idx,
+        )
+        self.category_id_embed = nn.Embedding(
+            self.model_args["category_num"],
+            self.embed_dim,
+            padding_idx=self.padding_idx,
+        )
+        self.brand_id_embed = nn.Embedding(
+            self.model_args["brand_num"],
+            self.embed_dim,
+            padding_idx=self.padding_idx,
+        )
+        self.price_bucket_embed = nn.Embedding(
+            self.model_args["price_bucket_num"],
+            self.embed_dim,
+            padding_idx=self.padding_idx,
+        )
+        self.time_bucket_embed = nn.Embedding(
+            self.model_args["time_bucket_num"],
+            self.embed_dim,
+            padding_idx=self.padding_idx,
+        )
+        self.event_type_embed = nn.Embedding(
+            self.model_args["event_type_num"],
+            self.embed_dim,
+            padding_idx=self.padding_idx,
+        )
+
+        self.transformer_layer = LightTransformerLayer(
+            n_heads=self.model_args["n_heads"],
+            k_interests=self.model_args["k_interests"],
+            hidden_size=self.embed_dim * 2,
+            seq_len=self.model_args["seq_len"],
+            intermediate_size=self.model_args["intermediate_size"],
+            hidden_dropout_prob=self.model_args["hidden_dropout_prob"],
+            attn_dropout_prob=self.model_args["attn_dropout_prob"],
+            hidden_act=self.model_args["hidden_act"],
+            layer_norm_eps=1e-12,
+        )
+
+        self.positional_encoding = PositionalEncoding(self.embed_dim * 2)
+
+        self.mlp = nn.Sequential(
+            nn.Linear(self.embed_dim * 2, self.model_args["intermediate_size"]),
+            activation_layer(self.model_args["hidden_act"]),
+            nn.Dropout(self.model_args["hidden_dropout_prob"]),
+            nn.Linear(self.model_args["intermediate_size"], 1),
+        )
+
+        self.sequence_linear_target = nn.Linear(self.embed_dim * 4, self.embed_dim)
+        self.sequence_linear = nn.Linear(self.embed_dim * 5, self.embed_dim)
+
+        self.model_name = "BST"
+
+    @staticmethod
+    def concat(features):
+        return torch.cat(features, dim=-1)
+
+    def _embed_history(
+        self,
+        hist_item_id,
+        hist_event_type,
+        hist_category,
+        hist_brand,
+        hist_price_bucket,
+        hist_time,
+    ):
+        return {
+            "item": self.item_id_embed(hist_item_id).transpose(0, 1),
+            "category": self.category_id_embed(hist_category).transpose(0, 1),
+            "brand": self.brand_id_embed(hist_brand).transpose(0, 1),
+            "price_bucket": self.price_bucket_embed(hist_price_bucket).transpose(0, 1),
+            "time": self.time_bucket_embed(hist_time).transpose(0, 1),
+            "event_type": self.event_type_embed(hist_event_type).transpose(0, 1),
+        }
+
+    def _embed_target(
+        self,
+        target_item_id,
+        target_category,
+        target_brand,
+        target_price_bucket,
+    ):
+        target_item_emb = self.item_id_embed(target_item_id)
+        target_category_emb = self.category_id_embed(target_category)
+        target_brand_emb = self.brand_id_embed(target_brand)
+        target_price_bucket_emb = self.price_bucket_embed(target_price_bucket)
+
+        target_time_idx = torch.zeros(
+            target_item_id.size(0),
+            dtype=torch.long,
+            device=target_item_id.device,
+        )
+        target_time_emb = self.time_bucket_embed(target_time_idx)
+
+        return {
+            "item": target_item_emb,
+            "category": target_category_emb,
+            "brand": target_brand_emb,
+            "price_bucket": target_price_bucket_emb,
+            "time": target_time_emb,
+        }
+
+    def _build_target_concat(self, target_embeds):
+        target_core = self.sequence_linear_target(
+            self.concat(
+                [
+                    target_embeds["item"],
+                    target_embeds["category"],
+                    target_embeds["brand"],
+                    target_embeds["price_bucket"],
+                ]
+            )
+        )
+        target_concat = self.concat([target_core, target_embeds["time"]])  # [B, 2D]
+        return target_concat
+
+    def _build_history_stack(self, hist_embeds):
+        hist_item = hist_embeds["item"]
+        hist_category = hist_embeds["category"]
+        hist_brand = hist_embeds["brand"]
+        hist_price_bucket = hist_embeds["price_bucket"]
+        hist_event_type = hist_embeds["event_type"]
+        hist_time = hist_embeds["time"]
+
+        history_core = self.sequence_linear(
+            self.concat(
+                [
+                    hist_item,
+                    hist_category,
+                    hist_brand,
+                    hist_price_bucket,
+                    hist_event_type,
+                ]
+            )
+        )
+        return self.concat([history_core, hist_time]).transpose(0, 1)
+
+    def forward(
+        self,
+        hist_item_id,
+        hist_event_type,
+        hist_category,
+        hist_brand,
+        hist_price_bucket,
+        hist_time,
+        target_item_id,
+        target_category,
+        target_brand,
+        target_price_bucket,
+    ):
+        hist_embeds = self._embed_history(
+            hist_item_id=hist_item_id,
+            hist_event_type=hist_event_type,
+            hist_category=hist_category,
+            hist_brand=hist_brand,
+            hist_price_bucket=hist_price_bucket,
+            hist_time=hist_time,
+        )
+
+        target_embeds = self._embed_target(
+            target_item_id=target_item_id,
+            target_category=target_category,
+            target_brand=target_brand,
+            target_price_bucket=target_price_bucket,
+        )
+
+        target_concat = self._build_target_concat(target_embeds)  # [B, 2D]
+        history_stack = self._build_history_stack(hist_embeds)
+        stacks = torch.cat([history_stack, target_concat.unsqueeze(1)], dim=1)
+        seq_len = stacks.size(1)
+        pos_emb = self.positional_encoding.get_pe(seq_len).squeeze(0).to(stacks.device)  # [L, D]
+        feats = self.transformer_layer(stacks, pos_emb=pos_emb)[:, -1, :]
+        output = self.mlp(feats).squeeze(-1)
+
+        return output
