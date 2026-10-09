@@ -211,3 +211,152 @@ class BiGNNLayer(nn.Module):
         inter_part2 = self.interActTransform(inter_feature)
 
         return inter_part1 + inter_part2
+
+
+class AttLayer(nn.Module):
+    """Calculate the attention signal(weight) according the input tensor.
+
+    Args:
+        infeatures (torch.FloatTensor): A 3D input tensor with shape of[batch_size, M, embed_dim].
+
+    Returns:
+        torch.FloatTensor: Attention weight of input. shape of [batch_size, M].
+    """
+
+    def __init__(self, in_dim, att_dim):
+        super(AttLayer, self).__init__()
+        self.in_dim = in_dim
+        self.att_dim = att_dim
+        self.w = torch.nn.Linear(in_features=in_dim, out_features=att_dim, bias=False)
+        self.h = nn.Parameter(torch.randn(att_dim), requires_grad=True)
+
+    def forward(self, infeatures):
+        att_signal = self.w(infeatures)  # [batch_size, M, att_dim]
+        att_signal = fn.relu(att_signal)  # [batch_size, M, att_dim]
+
+        att_signal = torch.mul(att_signal, self.h)  # [batch_size, M, att_dim]
+        att_signal = torch.sum(att_signal, dim=2)  # [batch_size, M]
+        att_signal = fn.softmax(att_signal, dim=1)  # [batch_size, M]
+
+        return att_signal
+
+
+class Dice(nn.Module):
+    r"""Dice activation function
+
+    .. math::
+        f(s)=p(s) \cdot s+(1-p(s)) \cdot \alpha s
+
+    .. math::
+        p(s)=\frac{1} {1 + e^{-\frac{s-E[s]} {\sqrt {Var[s] + \epsilon}}}}
+    """
+
+    def __init__(self, emb_size):
+        super(Dice, self).__init__()
+
+        self.sigmoid = nn.Sigmoid()
+        self.alpha = torch.zeros((emb_size,))
+
+    def forward(self, score):
+        self.alpha = self.alpha.to(score.device)
+        score_p = self.sigmoid(score)
+
+        return self.alpha * (1 - score_p) * score + score_p * score
+
+
+class SequenceAttLayer(nn.Module):
+    """Attention Layer. Get the representation of each user in the batch.
+
+    Args:
+        queries (torch.Tensor): candidate ads, [B, H], H means embedding_size * feat_num
+        keys (torch.Tensor): user_hist, [B, T, H]
+        keys_length (torch.Tensor): mask, [B]
+
+    Returns:
+        torch.Tensor: result
+    """
+
+    def __init__(
+        self,
+        mask_mat,
+        att_hidden_size=(80, 40),
+        activation="sigmoid",
+        softmax_stag=False,
+        return_seq_weight=True,
+    ):
+        super(SequenceAttLayer, self).__init__()
+        self.att_hidden_size = att_hidden_size
+        self.activation = activation
+        self.softmax_stag = softmax_stag
+        self.return_seq_weight = return_seq_weight
+        self.mask_mat = mask_mat
+        self.att_mlp_layers = MLPLayers(
+            self.att_hidden_size, activation=self.activation, bn=False
+        )
+        self.dense = nn.Linear(self.att_hidden_size[-1], 1)
+
+    def forward(self, queries, keys, keys_length):
+        embedding_size = queries.shape[-1]  # H
+        hist_len = keys.shape[1]  # T
+        queries = queries.repeat(1, hist_len)
+
+        queries = queries.view(-1, hist_len, embedding_size)
+
+        # MLP Layer
+        input_tensor = torch.cat(
+            [queries, keys, queries - keys, queries * keys], dim=-1
+        )
+        output = self.att_mlp_layers(input_tensor)
+        output = torch.transpose(self.dense(output), -1, -2)
+
+        # get mask
+        output = output.squeeze(1)
+        mask = self.mask_mat.repeat(output.size(0), 1)
+        mask = mask >= keys_length.unsqueeze(1)
+
+        # mask
+        if self.softmax_stag:
+            mask_value = -np.inf
+        else:
+            mask_value = 0.0
+
+        output = output.masked_fill(mask=mask, value=torch.tensor(mask_value))
+        output = output.unsqueeze(1)
+        output = output / (embedding_size**0.5)
+
+        # get the weight of each user's history list about the target item
+        if self.softmax_stag:
+            output = fn.softmax(output, dim=2)  # [B, 1, T]
+
+        if not self.return_seq_weight:
+            output = torch.matmul(output, keys)  # [B, 1, H]
+
+        return output
+
+
+class VanillaAttention(nn.Module):
+    """
+    Vanilla attention layer is implemented by linear layer.
+
+    Args:
+        input_tensor (torch.Tensor): the input of the attention layer
+
+    Returns:
+        hidden_states (torch.Tensor): the outputs of the attention layer
+        weights (torch.Tensor): the attention weights
+
+    """
+
+    def __init__(self, hidden_dim, attn_dim):
+        super().__init__()
+        self.projection = nn.Sequential(
+            nn.Linear(hidden_dim, attn_dim), nn.ReLU(True), nn.Linear(attn_dim, 1)
+        )
+
+    def forward(self, input_tensor):
+        # (B, Len, num, H) -> (B, Len, num, 1)
+        energy = self.projection(input_tensor)
+        weights = torch.softmax(energy.squeeze(-1), dim=-1)
+        # (B, Len, num, H) * (B, Len, num, 1) -> (B, len, H)
+        hidden_states = (input_tensor * weights.unsqueeze(-1)).sum(dim=-2)
+        return hidden_states, weights
