@@ -1,0 +1,25 @@
+from __future__ import annotations
+
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+
+class OnlineFeaturesResponse(BaseModel):
+    user_id: int
+    candidate_item_ids: list[int]
+    user_sequence: dict[str, Any]
+    item_features: dict[str, dict[str, Any]]
+
+
+class OnlineFeaturesRequest(BaseModel):
+    user_id: int = Field(ge=1)
+    candidate_item_ids: list[int] | None = Field(
+        default=None,
+        max_length=500,
+        description=(
+            "Omitted/null resolves candidates for the user; an empty array is an "
+            "explicit empty candidate set and must not trigger candidate resolution."
+        ),
+    )
+    top_k: int = Field(default=10, ge=1, le=100)
