@@ -141,9 +141,223 @@ class DemoRepository:
             products = [self._product(row) for row in await cursor.fetchall()]
             return {product.product_id: product for product in products}
 
+    async def record_event(
+        self,
+        request: EventRequest,
+        event_id: str,
+        payload_hash: str,
+    ) -> tuple[dict[str, Any], bool]:
+        now = utc_now()
+        correlation_id = request.request_id or f"web-event-{event_id}"
+        async with self.pool.connection() as connection:
+            async with connection.cursor() as cursor:
+                await cursor.execute(
+                    """
+                    SELECT event_id, event_timestamp, request_id, payload_hash
+                    FROM behavior_events WHERE event_id=%s
+                    ORDER BY created_ts DESC LIMIT 1
+                    """,
+                    (event_id,),
+                )
+                existing = await cursor.fetchone()
+                if existing:
+                    if existing["payload_hash"] != payload_hash:
+                        raise IdempotencyConflictError(event_id)
+                    return existing, True
+
+                await cursor.execute(
+                    "SELECT user_id FROM users WHERE user_id=%s AND is_active IS TRUE",
+                    (request.user_id,),
+                )
+                if await cursor.fetchone() is None:
+                    raise RecordNotFoundError(f"user {request.user_id}")
+                await cursor.execute(
+                    """
+                    SELECT product_id, product_name, category_id, category_code,
+                           brand_id, brand_name, current_price, price_bucket
+                    FROM products WHERE product_id=%s AND is_active IS TRUE
+                    """,
+                    (request.product_id,),
+                )
+                product_row = await cursor.fetchone()
+                if product_row is None:
+                    raise RecordNotFoundError(f"product {request.product_id}")
+
+                await self._upsert_session(cursor, request.session_id, request.user_id, now)
+                order_id: str | None = None
+                if request.action == "purchase":
+                    order_id = f"web-order-{event_id}"
+                    await self._insert_purchase(cursor, order_id, request, product_row, now)
+
+                if request.impression_id:
+                    await cursor.execute(
+                        """
+                        UPDATE impressions SET is_clicked=TRUE
+                        WHERE impression_id=%s AND user_id=%s AND candidate_product_id=%s
+                        """,
+                        (request.impression_id, request.user_id, request.product_id),
+                    )
+
+                await cursor.execute(
+                    """
+                    INSERT INTO behavior_events (
+                      event_id, event_timestamp, created_ts, ingestion_ts, user_id,
+                      session_id, request_id, impression_id, event_type, product_id,
+                      category_id, brand_id, price, price_bucket, quantity, device_type,
+                      source, campaign_id, page_context, rank_position, order_id,
+                      payload_hash, event_date, schema_version, drift_enabled,
+                      drift_scenario, drift_phase, drift_factor
+                    ) VALUES (
+                      %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                      %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
+                    )
+                    """,
+                    (
+                        event_id,
+                        now,
+                        now,
+                        now,
+                        request.user_id,
+                        request.session_id,
+                        correlation_id,
+                        request.impression_id,
+                        request.action,
+                        request.product_id,
+                        product_row["category_id"],
+                        product_row["brand_id"],
+                        product_row["current_price"],
+                        product_row["price_bucket"],
+                        request.quantity,
+                        "web",
+                        "recsys_demo_web",
+                        "production_demo",
+                        "catalog" if not request.impression_id else "recommendations",
+                        None,
+                        order_id,
+                        payload_hash,
+                        now.date(),
+                        2,
+                        False,
+                        "none",
+                        "none",
+                        1.0,
+                    ),
+                )
+                await cursor.execute(
+                    "UPDATE users SET last_active_ts=%s, updated_ts=%s WHERE user_id=%s",
+                    (now, now, request.user_id),
+                )
+            await connection.commit()
+        return {
+            "event_id": event_id,
+            "event_timestamp": now,
+            "request_id": correlation_id,
+            "payload_hash": payload_hash,
+        }, False
+
+    async def event(self, event_id: str) -> dict[str, Any] | None:
+        async with self.pool.connection() as connection, connection.cursor() as cursor:
+            await cursor.execute(
+                """
+                SELECT event_id, event_timestamp, user_id, product_id, event_type,
+                       request_id, impression_id
+                FROM behavior_events WHERE event_id=%s
+                ORDER BY created_ts DESC LIMIT 1
+                """,
+                (event_id,),
+            )
+            return await cursor.fetchone()
+
 
     @staticmethod
     def _product(row: dict[str, Any]) -> Product:
         payload = dict(row)
         payload["current_price"] = float(payload.get("current_price") or 0)
         return Product.model_validate(payload)
+
+    @staticmethod
+    async def _upsert_session(cursor: Any, session_id: str, user_id: int, now: datetime) -> None:
+        await cursor.execute(
+            """
+            INSERT INTO sessions (
+              session_id, user_id, session_start_ts, session_end_ts, entry_source,
+              device_type, campaign_id, session_end_reason, created_ts, updated_ts
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (session_id) DO UPDATE SET
+              session_end_ts=EXCLUDED.session_end_ts,
+              updated_ts=EXCLUDED.updated_ts
+            """,
+            (
+                session_id,
+                user_id,
+                now,
+                now + timedelta(minutes=30),
+                "recsys_demo_web",
+                "web",
+                "production_demo",
+                "active",
+                now,
+                now,
+            ),
+        )
+
+    @staticmethod
+    async def _insert_purchase(
+        cursor: Any,
+        order_id: str,
+        request: EventRequest,
+        product: dict[str, Any],
+        now: datetime,
+    ) -> None:
+        unit_price = Decimal(product["current_price"])
+        total = unit_price * request.quantity
+        await cursor.execute(
+            """
+            INSERT INTO orders (
+              order_id, user_id, session_id, order_timestamp, status, gross_amount,
+              discount_amount, net_amount, coupon_code, payment_method, shipping_city,
+              paid_ts, cancelled_ts, refunded_ts, created_ts, updated_ts,
+              drift_enabled, drift_scenario, drift_phase, drift_factor
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """,
+            (
+                order_id,
+                request.user_id,
+                request.session_id,
+                now,
+                "paid",
+                total,
+                Decimal("0.00"),
+                total,
+                "",
+                "demo",
+                "HCMC",
+                now,
+                None,
+                None,
+                now,
+                now,
+                False,
+                "none",
+                "none",
+                1.0,
+            ),
+        )
+        await cursor.execute(
+            """
+            INSERT INTO order_items (
+              order_item_id, order_id, product_id, quantity, unit_price,
+              discount_amount, line_amount, created_ts
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+            """,
+            (
+                f"web-order-item-{uuid.uuid4()}",
+                order_id,
+                request.product_id,
+                request.quantity,
+                unit_price,
+                Decimal("0.00"),
+                total,
+                now,
+            ),
+        )
