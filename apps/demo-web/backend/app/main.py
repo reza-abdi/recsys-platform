@@ -203,6 +203,63 @@ async def event_status(event_id: str) -> EventStatus:
         return EventStatus(event_id=event_id, status="accepted", feature_service_available=False)
 
 
+@app.post("/api/recommendations", response_model=RecommendationResponse)
+async def recommendations(request: RecommendationRequest) -> RecommendationResponse:
+    try:
+        if not await repository.user_exists(request.user_id):
+            raise HTTPException(status_code=404, detail="user not found")
+        session_id = request.session_id or f"web-session-{uuid.uuid4()}"
+        request_id = f"web-recommendation-{uuid.uuid4()}"
+        await repository.record_recommendation_request(
+            request.user_id,
+            session_id,
+            request_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="database unavailable") from exc
+
+    try:
+        assert downstream_client is not None
+        upstream = await downstream_client.post(
+            f"{inference_url()}/recommendations",
+            json={"user_id": request.user_id, "top_k": request.top_k},
+        )
+        upstream.raise_for_status()
+        payload: dict[str, Any] = upstream.json()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="recommendation service unavailable") from exc
+
+    raw_items = payload.get("items") or []
+    product_map = await repository.products_by_id([int(item["item_id"]) for item in raw_items])
+    items = [
+        RecommendationItem(
+            item_id=int(item["item_id"]),
+            score=float(item["score"]),
+            impression_id=f"web-impression-{uuid.uuid4()}",
+            product=product_map.get(int(item["item_id"])),
+        )
+        for item in raw_items
+    ]
+    try:
+        await repository.record_impressions(
+            request_id,
+            request.user_id,
+            session_id,
+            items,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="failed to persist recommendation impressions") from exc
+    return RecommendationResponse(
+        request_id=request_id,
+        user_id=request.user_id,
+        model_version=str(payload.get("model_version", "unknown")),
+        ab_variant=payload.get("ab_variant"),
+        ab_experiment_id=payload.get("ab_experiment_id"),
+        items=items,
+    )
+
 
 def _feature_sequence_contains(sequence: dict[str, Any], event: dict[str, Any]) -> bool:
     item_ids = sequence.get("hist_item_ids") or []
