@@ -176,3 +176,50 @@ async def create_event(
         duplicate=duplicate,
         event_timestamp=row["event_timestamp"],
     )
+
+
+@app.get("/api/events/{event_id}/status", response_model=EventStatus)
+async def event_status(event_id: str) -> EventStatus:
+    row = await repository.event(event_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="event not found")
+    try:
+        assert downstream_client is not None
+        response = await downstream_client.post(
+            f"{feature_url()}/online-features",
+            json={
+                "user_id": row["user_id"],
+                "candidate_item_ids": [row["product_id"]],
+                "top_k": 1,
+            },
+        )
+        response.raise_for_status()
+        sequence = response.json().get("user_sequence") or {}
+        if _feature_sequence_contains(sequence, row):
+            return EventStatus(event_id=event_id, status="feature_store_updated")
+        return EventStatus(event_id=event_id, status="accepted")
+    except Exception:
+        LOGGER.warning("feature_status_unavailable event_id=%s", event_id, exc_info=True)
+        return EventStatus(event_id=event_id, status="accepted", feature_service_available=False)
+
+
+
+def _feature_sequence_contains(sequence: dict[str, Any], event: dict[str, Any]) -> bool:
+    item_ids = sequence.get("hist_item_ids") or []
+    type_ids = sequence.get("hist_event_type_ids") or []
+    request_ids = sequence.get("hist_request_ids") or []
+    impression_ids = sequence.get("hist_impression_ids") or []
+    expected_type = event_type_id(str(event["event_type"]))
+    length = min(len(item_ids), len(type_ids), len(request_ids))
+    for index in range(length - 1, -1, -1):
+        if int(item_ids[index]) != int(event["product_id"]):
+            continue
+        if int(type_ids[index]) != expected_type:
+            continue
+        if str(request_ids[index]) != str(event["request_id"] or ""):
+            continue
+        if event.get("impression_id") and index < len(impression_ids):
+            if str(impression_ids[index]) != str(event["impression_id"]):
+                continue
+        return True
+    return False
