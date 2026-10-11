@@ -125,3 +125,27 @@ async def ready() -> dict[str, str]:
 @app.get("/metrics")
 async def metrics() -> Response:
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+@app.get("/api/users", response_model=UserPage)
+async def users(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> UserPage:
+    try:
+        items, total = await repository.users(limit, offset)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="database unavailable") from exc
+    return UserPage(items=items, total=total, limit=limit, offset=offset)
+
+
+@app.get("/api/products", response_model=ProductPage)
+async def products(
+    limit: int = Query(default=24, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> ProductPage:
+    try:
+        items, total = await repository.products(limit, offset)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="database unavailable") from exc
+    return ProductPage(items=items, total=total, limit=limit, offset=offset)
