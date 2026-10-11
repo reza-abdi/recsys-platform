@@ -149,3 +149,30 @@ async def products(
     except Exception as exc:
         raise HTTPException(status_code=503, detail="database unavailable") from exc
     return ProductPage(items=items, total=total, limit=limit, offset=offset)
+
+
+@app.post("/api/events", response_model=EventAccepted, status_code=status.HTTP_202_ACCEPTED)
+async def create_event(
+    request: EventRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> EventAccepted:
+    selected_key = idempotency_key.strip() if idempotency_key else None
+    if selected_key is not None and not 8 <= len(selected_key) <= 200:
+        raise HTTPException(status_code=422, detail="Idempotency-Key must contain 8-200 characters")
+    event_id = event_id_for(request, selected_key)
+    payload_hash = canonical_payload_hash(request)
+    try:
+        row, duplicate = await repository.record_event(request, event_id, payload_hash)
+    except RecordNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"{exc} not found") from exc
+    except IdempotencyConflictError as exc:
+        raise HTTPException(status_code=409, detail=f"idempotency conflict for event {exc}") from exc
+    except Exception as exc:
+        LOGGER.exception("event_write_failed event_id=%s", event_id)
+        raise HTTPException(status_code=503, detail="database unavailable") from exc
+    return EventAccepted(
+        event_id=event_id,
+        correlation_id=str(row["request_id"]),
+        duplicate=duplicate,
+        event_timestamp=row["event_timestamp"],
+    )
