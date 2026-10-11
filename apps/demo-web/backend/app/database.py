@@ -268,6 +268,74 @@ class DemoRepository:
             )
             return await cursor.fetchone()
 
+    async def record_recommendation_request(self, user_id: int, session_id: str, request_id: str) -> None:
+        now = utc_now()
+        async with self.pool.connection() as connection, connection.cursor() as cursor:
+            await self._upsert_session(cursor, session_id, user_id, now)
+            await cursor.execute(
+                """
+                INSERT INTO recommendation_requests (
+                  request_id, user_id, session_id, request_timestamp, surface,
+                  context_product_id, context_category_id, device_type, source,
+                  campaign_id, created_ts, schema_version
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (request_id) DO NOTHING
+                """,
+                (
+                    request_id,
+                    user_id,
+                    session_id,
+                    now,
+                    "home",
+                    None,
+                    None,
+                    "web",
+                    "recsys_demo_web",
+                    "production_demo",
+                    now,
+                    2,
+                ),
+            )
+            await connection.commit()
+
+    async def record_impressions(
+        self,
+        request_id: str,
+        user_id: int,
+        session_id: str,
+        items: list[RecommendationItem],
+    ) -> None:
+        now = utc_now()
+        async with self.pool.connection() as connection, connection.cursor() as cursor:
+            for rank, item in enumerate(items, start=1):
+                await cursor.execute(
+                    """
+                    INSERT INTO impressions (
+                      impression_id, request_id, user_id, session_id,
+                      impression_timestamp, candidate_product_id, rank_position,
+                      candidate_source, retrieval_score, ranking_score, surface,
+                      is_clicked, created_ts, schema_version
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT (impression_id) DO NOTHING
+                    """,
+                    (
+                        item.impression_id,
+                        request_id,
+                        user_id,
+                        session_id,
+                        now,
+                        item.item_id,
+                        rank,
+                        "bst_online_ranking",
+                        item.score,
+                        item.score,
+                        "home",
+                        False,
+                        now,
+                        2,
+                    ),
+                )
+            await connection.commit()
 
     @staticmethod
     def _product(row: dict[str, Any]) -> Product:
