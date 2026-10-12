@@ -344,3 +344,215 @@ def dispatch_job_matches(existing, desired):
         return False
     return contains_spec(existing.get("metadata", {}).get("labels"), desired["metadata"]["labels"]) and contains_spec(
         existing.get("spec"), desired["spec"])
+
+
+class Trigger:
+    def __init__(self):
+        self.db = Database(os.environ["AB_DATABASE_URL"])
+        self.http = httpx.Client(timeout=20, follow_redirects=False, transport=httpx.HTTPTransport(retries=0))
+
+    def migrate(self):
+        with self.db.connect() as c:
+            c.execute("SELECT pg_advisory_lock(hashtextextended('recsys-ab-trigger-schema',0))")
+            try:
+                c.execute(ROUTER_DDL)
+                c.execute(DDL)
+            finally:
+                c.execute("SELECT pg_advisory_unlock(hashtextextended('recsys-ab-trigger-schema',0))")
+
+    def request(self, eid):
+        with self.db.connect() as c:
+            return c.execute("SELECT * FROM recsys_ab.trigger_requests WHERE experiment_id=%s", (eid,)).fetchone()
+
+    def metrics(self):
+        # Shared DB gauges: each receiver replica exports the same values. Never
+        # sum replicas, and never rate() queue age or mutable dispatch status.
+        with self.db.connect() as c:
+            rows = c.execute("""SELECT experiment_id,status,extract(epoch FROM created_at) AS created,
+                extract(epoch FROM updated_at) AS updated,
+                CASE WHEN status IN ('QUEUED','WAITING','DISPATCHING','SUBMITTED')
+                  THEN greatest(0,extract(epoch FROM now()-created_at)) END AS queue_age
+                FROM recsys_ab.trigger_requests
+                WHERE experiment_id LIKE %s ORDER BY created_at""",
+                (configured_experiment_pattern(),)).fetchall()
+            actions = c.execute("""SELECT experiment_id,action,target_weight,status,
+                extract(epoch FROM updated_at) AS updated FROM recsys_ab.controller_actions
+                ORDER BY created_at""").fetchall()
+            traffic = c.execute("""SELECT experiment_id,status,phase,live_submitted,
+                synthetic_submitted,extract(epoch FROM heartbeat_at) AS heartbeat
+                FROM recsys_ab.traffic_runs ORDER BY created_at""").fetchall()
+        lines = ["# TYPE recsys_workflow_dispatch_status gauge",
+                 "# TYPE recsys_workflow_dispatch_queue_age_seconds gauge",
+                 "# TYPE recsys_workflow_dispatch_updated_at gauge",
+                 "# TYPE recsys_ab_controller_action gauge",
+                 "# TYPE recsys_ab_controller_last_tick gauge",
+                 "# TYPE recsys_ab_traffic_job_status gauge",
+                 "# TYPE recsys_ab_traffic_job_heartbeat gauge",
+                 "# TYPE recsys_ab_traffic_job_requests gauge"]
+        for r in rows:
+            labels = "experiment_id=" + json_label(r["experiment_id"]) + ",status=" + json_label(r["status"])
+            lines.append("recsys_workflow_dispatch_status{" + labels + "} 1")
+            lines.append("recsys_workflow_dispatch_updated_at{" + labels + "} " + str(r["updated"]))
+            if r["queue_age"] is not None:
+                lines.append("recsys_workflow_dispatch_queue_age_seconds{" + labels + "} " + str(r["queue_age"]))
+        for row in actions:
+            labels = ",".join([
+                "experiment_id=" + json_label(row["experiment_id"]),
+                "action=" + json_label(row["action"]),
+                "target_weight=" + json_label(row["target_weight"] if row["target_weight"] is not None else "none"),
+                "status=" + json_label(row["status"]),
+            ])
+            lines.append("recsys_ab_controller_action{" + labels + "} 1")
+            lines.append("recsys_ab_controller_last_tick{experiment_id=" +
+                         json_label(row["experiment_id"]) + "} " + str(row["updated"]))
+        for row in traffic:
+            labels = ",".join([
+                "experiment_id=" + json_label(row["experiment_id"]),
+                "status=" + json_label(row["status"]),
+                "phase=" + json_label(row["phase"] or "WAITING"),
+            ])
+            lines.append("recsys_ab_traffic_job_status{" + labels + "} 1")
+            if row["heartbeat"] is not None:
+                lines.append("recsys_ab_traffic_job_heartbeat{experiment_id=" +
+                             json_label(row["experiment_id"]) + "} " + str(row["heartbeat"]))
+            for kind, field in (("live_test", "live_submitted"), ("synthetic_case", "synthetic_submitted")):
+                lines.append("recsys_ab_traffic_job_requests{experiment_id=" +
+                             json_label(row["experiment_id"]) + ",traffic_kind=" +
+                             json_label(kind) + "} " + str(row[field]))
+        return "\n".join(lines) + "\n"
+
+    def update(self, eid, status, **values):
+        allowed = {"reason", "candidate_uri", "candidate", "config_diff", "job_name", "queue_id", "build_url",
+                   "label_state", "label_sync_status", "label_sync_error"}
+        if set(values) - allowed:
+            raise ValueError("invalid update")
+        fields = ["status=%s", "updated_at=now()"] + [k + "=%s" for k in values]
+        with self.db.connect() as c:
+            c.execute("UPDATE recsys_ab.trigger_requests SET " + ",".join(fields) + " WHERE experiment_id=%s",
+                      [status, *[Jsonb(v) if isinstance(v, dict) else v for v in values.values()], eid])
+        # Retain the existing event name because dashboards and Loki queries
+        # consume it for both workflow- and Recommendation-scoped rollouts.
+        print(json.dumps({"event": "workflow.dispatch", "experiment_id": eid, "status": status,
+                          "event_id": digest([eid, status, {k: v for k, v in values.items() if k in {"reason", "queue_id", "build_url", "job_name"}}]),
+                          "at": time.time(),
+                          **{k: v for k, v in values.items() if k in {"reason", "queue_id", "build_url", "job_name"}}}), flush=True)
+
+    def prompt(self, name, version):
+        response = self.http.get(os.environ["LANGFUSE_BASE_URL"].rstrip("/") + "/api/public/v2/prompts/" + quote(name, safe=""),
+            params={"version": version}, auth=(os.environ["LANGFUSE_PUBLIC_KEY"], os.environ["LANGFUSE_SECRET_KEY"]))
+        response.raise_for_status()
+        prompt = response.json()
+        if (prompt.get("version") != version or prompt.get("name") != name
+                or prompt.get("prompt") not in {PROMPT_TEXT, LEGACY_PROMPT_TEXT, PARKING_PROMPT_TEXT}):
+            raise ValueError("unexpected prompt version or immutable prompt text changed")
+        return prompt
+
+    def ready_prompts(self):
+        """List candidates, then require an exact-version read before use."""
+        response = self.http.get(
+            os.environ["LANGFUSE_BASE_URL"].rstrip("/") + "/api/public/v2/prompts",
+            params={"name": os.environ["AB_LANGFUSE_PROMPT"], "label": READY_LABEL, "limit": 100},
+            auth=(os.environ["LANGFUSE_PUBLIC_KEY"], os.environ["LANGFUSE_SECRET_KEY"]),
+        )
+        response.raise_for_status()
+        payload = response.json()
+        rows = payload.get("data", payload if isinstance(payload, list) else [])
+        if not isinstance(rows, list):
+            raise ValueError("invalid Langfuse prompt list response")
+        versions = set()
+        for row in rows:
+            if row.get("name") != os.environ["AB_LANGFUSE_PROMPT"]:
+                continue
+            listed = row.get("versions", [row.get("version")])
+            if not isinstance(listed, list):
+                raise ValueError("invalid Langfuse prompt version list")
+            versions.update(v for v in listed if type(v) is int and v > 0)
+        return [self.prompt(os.environ["AB_LANGFUSE_PROMPT"], version)
+                for version in sorted(versions)]
+
+    def move_labels(self, name, version, labels):
+        """Move pointer labels with the public API supported by Langfuse 4.17."""
+        if (not labels or not all(isinstance(label, str) and re.fullmatch(r"[a-z0-9-]{1,64}", label)
+                                  for label in labels)):
+            raise ValueError("invalid Langfuse label update")
+        response = self.http.patch(
+            os.environ["LANGFUSE_BASE_URL"].rstrip("/") + "/api/public/v2/prompts/"
+            + quote(name, safe="") + "/versions/" + str(version),
+            json={"newLabels": labels},
+            auth=(os.environ["LANGFUSE_PUBLIC_KEY"], os.environ["LANGFUSE_SECRET_KEY"]),
+        )
+        response.raise_for_status()
+
+    def parking_prompt(self):
+        version = int(os.environ["AB_LANGFUSE_PARKING_VERSION"])
+        prompt = self.prompt(os.environ["AB_LANGFUSE_PROMPT"], version)
+        if (prompt.get("prompt") != PARKING_PROMPT_TEXT
+                or prompt.get("config") != {"schema_version": 0, "scope": "recommendation",
+                                             "kind": "ab-label-parking"}
+                or PARKING_LABEL not in prompt.get("labels", [])):
+            raise ValueError("Langfuse parking version identity mismatch")
+        return prompt
+
+    def _record_labels(self, eid, status, candidate, parking, error=None):
+        state = {
+            "candidate_version": candidate.get("version") if candidate else None,
+            "candidate": sorted(candidate.get("labels", [])) if candidate else [],
+            "parking_version": parking.get("version") if parking else None,
+            "parking": sorted(parking.get("labels", [])) if parking else [],
+        }
+        self.update(eid, status, label_state=state,
+                    label_sync_status="WAITING" if error else "SYNCED",
+                    label_sync_error=error)
+        with self.db.connect() as c:
+            c.execute("UPDATE recsys_ab.trigger_requests SET labels_updated_at=now() WHERE experiment_id=%s", (eid,))
+
+    def claim_labels(self, row, candidate):
+        """Remove the ready pointer before Jenkins can receive the request."""
+        eid = row["experiment_id"]
+        parking = self.parking_prompt()
+        labels = set(candidate.get("labels", []))
+        parked = READY_LABEL in parking.get("labels", [])
+        if ACTIVE_LABEL in labels and READY_LABEL not in labels and parked:
+            self._record_labels(eid, row["status"], candidate, parking)
+            return
+        if READY_LABEL not in labels:
+            raise ValueError("candidate withdrawn before label claim")
+        self.move_labels(row["prompt_name"], row["prompt_version"], [ACTIVE_LABEL])
+        self.move_labels(row["prompt_name"], parking["version"], [READY_LABEL])
+        candidate = self.prompt(row["prompt_name"], row["prompt_version"])
+        parking = self.parking_prompt()
+        labels = set(candidate.get("labels", []))
+        if ACTIVE_LABEL not in labels or READY_LABEL in labels or READY_LABEL not in parking.get("labels", []):
+            raise ValueError("Langfuse label claim verification failed")
+        self._record_labels(eid, row["status"], candidate, parking)
+
+    def sync_terminal_labels(self):
+        """Project durable terminal state to latest-result Langfuse pointers."""
+        if not polling_mode():
+            return
+        with self.db.connect() as c:
+            rows = c.execute("""SELECT * FROM recsys_ab.trigger_requests
+                WHERE experiment_id LIKE 'rec-%%' AND status IN ('COMPLETED','REJECTED','ROLLED_BACK','ROLLBACK_FAILED')
+                  AND coalesce(label_sync_status,'') <> 'TERMINAL_SYNCED'
+                ORDER BY created_at LIMIT 100""").fetchall()
+        for row in rows:
+            try:
+                parking = self.parking_prompt()
+                label = TERMINAL_LABELS[row["status"]]
+                self.move_labels(row["prompt_name"], row["prompt_version"], [label])
+                # Both transient pointers must leave the candidate.  Langfuse
+                # 4.17 moves each pointer when it is assigned to another version.
+                self.move_labels(row["prompt_name"], parking["version"], [READY_LABEL, ACTIVE_LABEL])
+                candidate = self.prompt(row["prompt_name"], row["prompt_version"])
+                parking = self.parking_prompt()
+                labels = set(candidate.get("labels", []))
+                if label not in labels or labels & {READY_LABEL, ACTIVE_LABEL}:
+                    raise ValueError("terminal Langfuse label verification failed")
+                self._record_labels(row["experiment_id"], row["status"], candidate, parking)
+                with self.db.connect() as c:
+                    c.execute("UPDATE recsys_ab.trigger_requests SET label_sync_status='TERMINAL_SYNCED', label_sync_error=NULL, labels_updated_at=now() WHERE experiment_id=%s",
+                              (row["experiment_id"],))
+            except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+                # Do not include response bodies or credentials in durable errors.
+                self.update(row["experiment_id"], row["status"],
+                            label_sync_status="WAITING", label_sync_error=type(exc).__name__)
