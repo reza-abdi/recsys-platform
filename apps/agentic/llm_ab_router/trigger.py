@@ -1070,3 +1070,73 @@ class Trigger:
             self.sync_terminal_labels()
             return dispatched or {"status": "DISPATCHED" if accepted else "IDLE",
                                   "experiment_id": accepted[0] if accepted else None}
+
+
+def create_app(service=None):
+    service = service or Trigger()
+    @asynccontextmanager
+    async def lifespan(app):
+        service.migrate()
+        yield
+    app = FastAPI(lifespan=lifespan)
+    @app.get("/healthz")
+    def health():
+        with service.db.connect() as c:
+            c.execute("SELECT 1")
+        return {"ok": True}
+    @app.post("/webhooks/langfuse", status_code=202)
+    @app.post("/webhooks/langfuse-recommendation", status_code=202)
+    async def webhook(request: Request):
+        try:
+            size = int(request.headers.get("content-length", "0"))
+        except ValueError:
+            raise HTTPException(400, "invalid content length")
+        if size > 262144:
+            raise HTTPException(413)
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > 262144:
+                raise HTTPException(413)
+        raw = bytes(raw)
+        import asyncio
+        try:
+            return await asyncio.to_thread(service.accept, raw, request.headers.get("x-langfuse-signature", ""))
+        except (ValueError, KeyError, TypeError):
+            raise HTTPException(400, "invalid agent rollout webhook")
+    @app.get("/metrics")
+    def metrics():
+        return Response(service.metrics(), media_type="text/plain; version=0.0.4")
+    @app.get("/experiments/{eid}")
+    def status(eid: str, request: Request):
+        if not hmac.compare_digest(request.headers.get("authorization", ""), "Bearer " + os.environ["AB_TRIGGER_STATUS_TOKEN"]):
+            raise HTTPException(403)
+        row = service.request(eid)
+        if not row:
+            raise HTTPException(404)
+        return {k: row[k] for k in ("experiment_id", "status", "reason", "job_name", "queue_id", "build_url", "config_diff", "created_at", "updated_at")}
+    return app
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("action", choices=["serve", "dispatch", "reconcile", "poll", "migrate"])
+    parser.add_argument("experiment_id", nargs="?")
+    args = parser.parse_args()
+    if args.action == "serve":
+        import uvicorn
+        uvicorn.run(create_app(), host="0.0.0.0", port=8080)
+    else:
+        service = Trigger()
+        service.migrate()
+        if args.action == "migrate":
+            print(json.dumps({"status": "MIGRATED"}))
+        elif args.action == "dispatch":
+            service.dispatch(args.experiment_id)
+        elif args.action == "poll":
+            print(json.dumps(service.poll(), sort_keys=True))
+        else:
+            service.reconcile()
+
+if __name__ == "__main__":
+    main()
