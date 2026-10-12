@@ -703,3 +703,370 @@ class Trigger:
                     or stored["config"] != config):
                 raise ValueError("immutable polled prompt collision")
         return eid
+
+    def ensure_job(self, eid):
+        if os.environ.get("AB_DISPATCH_ENABLED") != "true":
+            return
+        obj = dispatch_job(eid)
+        token = Path("/var/run/secrets/kubernetes.io/serviceaccount/token").read_text().strip()
+        import ssl
+        tls = ssl.create_default_context(cafile="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+        with httpx.Client(verify=tls, timeout=15) as kube:
+            response = kube.post("https://kubernetes.default.svc/apis/batch/v1/namespaces/" + os.environ.get("AB_NAMESPACE", "kagent") + "/jobs",
+                                 json=obj, headers={"Authorization": "Bearer " + token})
+            if response.status_code == 409:
+                existing = kube.get("https://kubernetes.default.svc/apis/batch/v1/namespaces/" + os.environ.get("AB_NAMESPACE", "kagent") + "/jobs/" + obj["metadata"]["name"],
+                                    headers={"Authorization": "Bearer " + token})
+                existing.raise_for_status()
+                if not dispatch_job_matches(existing.json(), obj):
+                    self.update(eid, "NEEDS_ATTENTION", reason="dispatch Job name occupied by different spec")
+                    return
+            else:
+                response.raise_for_status()
+        with self.db.connect() as c:
+            c.execute("UPDATE recsys_ab.trigger_requests SET job_name=%s WHERE experiment_id=%s", (obj["metadata"]["name"], eid))
+
+    def jenkins(self, path, method="GET", **kwargs):
+        base = os.environ["AB_JENKINS_URL"].rstrip("/")
+        response = self.http.request(method, base + path, auth=(os.environ["AB_JENKINS_USER"], os.environ["AB_JENKINS_TOKEN"]), **kwargs)
+        response.raise_for_status()
+        return response
+
+    def reconcile_build(self, row):
+        eid = row["experiment_id"]
+        scope = scope_from_experiment(eid)
+        job_name = jenkins_job(scope)
+        job = quote(job_name, safe="")
+        builds = self.jenkins("/job/" + job + "/api/json", params={"tree": "builds[number,url,building,result,actions[parameters[name,value]]]{0,100}"}).json().get("builds", [])
+        queued = self.jenkins("/queue/api/json", params={"tree": "items[id,task[name],actions[parameters[name,value]]]"}).json().get("items", [])
+        def matches(entry):
+            return any(p.get("name") == "EXPERIMENT_ID" and p.get("value") == eid
+                       for a in entry.get("actions", []) for p in a.get("parameters", []))
+        found = [b for b in builds if matches(b)]
+        queued = [q for q in queued if q.get("task", {}).get("name") == job_name and matches(q)]
+        if len(found) + len(queued) > 1:
+            self.update(eid, "NEEDS_ATTENTION", reason="multiple Jenkins deliveries found; operator reconciliation required")
+            return True
+        if found:
+            build = found[0]
+            store = StateStore(state_uri(scope))
+            state, _ = store.read()
+            if state.get("experiment_id") != eid:
+                archived = next((r for r in reversed(state.get("history", [])) if r["experiment_id"] == eid), None)
+                if archived:
+                    state = store.read_archive(archived)
+            if build.get("building"):
+                status = "RUNNING"
+            elif state.get("experiment_id") == eid and state["phase"] in {
+                    "COMPLETED", "ROLLED_BACK", "ROLLBACK_FAILED",
+                    "HOLD", "WAITING", "NEEDS_ATTENTION"}:
+                status = state["phase"]
+            elif (build.get("result") in {"FAILURE", "ABORTED", "NOT_BUILT"}
+                    and (row.get("candidate") or {}).get("release_id")
+                    in state.get("disabled", [])):
+                # Jenkins may reject an already-quarantined immutable release
+                # before Engine.start writes this experiment into state.  That
+                # outcome is deterministic, not an uncertain delivery, and can
+                # safely project ab-fail without any inference replay.
+                status = "REJECTED"
+            else:
+                status = "NEEDS_ATTENTION"
+            values = {"build_url": build["url"]}
+            if status == "REJECTED":
+                values["reason"] = "candidate release is quarantined; Jenkins rejected before experiment start"
+            elif status != "NEEDS_ATTENTION":
+                values["reason"] = None
+            self.update(eid, status, **values)
+            return True
+        if queued:
+            self.update(eid, "SUBMITTED", queue_id=str(queued[0]["id"]))
+            return True
+        return False
+
+    def dispatch(self, eid):
+        if os.environ.get("AB_DISPATCH_ENABLED") != "true":
+            return
+        scope = scope_from_experiment(eid)
+        with self.db.session(scope + "-trigger:" + eid):
+            return self._dispatch(eid)
+
+    def _dispatch(self, eid):
+        row = self.request(eid)
+        if not row or row["status"] not in {"QUEUED", "WAITING", "DISPATCHING", "SUBMITTED", "RUNNING"}:
+            return
+        if row["status"] in {"DISPATCHING", "SUBMITTED", "RUNNING"}:
+            if row["submitted_at"] and time.time() - row["submitted_at"].timestamp() < 60:
+                return
+            if not self.reconcile_build(row):
+                self.update(eid, "NEEDS_ATTENTION", reason="uncertain Jenkins delivery; never auto-resubmit")
+            return
+        scope = scope_from_experiment(eid)
+        if row["config"].get("scope") != scope:
+            self.update(eid, "REJECTED", reason="experiment/config scope mismatch")
+            return
+        if polling_mode():
+            with self.db.connect() as c:
+                active = c.execute("""SELECT experiment_id FROM recsys_ab.trigger_requests
+                    WHERE experiment_id LIKE 'rec-%%' AND (
+                      status IN ('DISPATCHING','SUBMITTED','RUNNING','HOLD','NEEDS_ATTENTION')
+                      OR (status='WAITING' AND label_state->'candidate' ? 'ab-running'))
+                      AND experiment_id<>%s LIMIT 1""", (eid,)).fetchone()
+            if active:
+                self.update(eid, "WAITING", reason="another Recommendation experiment is active")
+                return
+        item = target(scope)
+        current_state_uri = state_uri(scope)
+        state, _ = StateStore(current_state_uri).read()
+        if state["phase"] not in {"IDLE", "COMPLETED", "ROLLED_BACK"}:
+            self.update(eid, "WAITING", reason="another experiment is active")
+            return
+        try:
+            prompt = self.prompt(row["prompt_name"], row["prompt_version"])
+            labels = set(prompt.get("labels", []))
+            allowed_label_state = (READY_LABEL in labels or
+                                   (polling_mode() and ACTIVE_LABEL in labels and READY_LABEL not in labels))
+            if not allowed_label_state or prompt["config"] != row["config"]:
+                raise ValueError("candidate withdrawn or changed")
+            if row.get("prompt_checksum") and prompt_checksum(
+                    row.get("project_id") or os.environ["LANGFUSE_PROJECT_ID"], prompt
+                    ) != row["prompt_checksum"]:
+                raise ValueError("immutable prompt checksum mismatch")
+            _, candidate = self._catalog_and_candidate(state, row["config"])
+            rejection = self.candidate_rejection(state, candidate)
+            if rejection:
+                raise ValueError(rejection)
+            bucket = os.environ.get("AB_CATALOG_BUCKET", "recsys-llm-ab")
+            key = item["candidate_prefix"] + eid + ".json"
+            data = json.dumps(candidate, sort_keys=True, separators=(",", ":")).encode()
+            from botocore.exceptions import ClientError
+            try:
+                s3_client().put_object(Bucket=bucket, Key=key, Body=data, ContentType="application/json", IfNoneMatch="*")
+            except ClientError as exc:
+                if exc.response["ResponseMetadata"]["HTTPStatusCode"] != 412:
+                    raise
+                if s3_client().get_object(Bucket=bucket, Key=key)["Body"].read() != data:
+                    raise ValueError("immutable candidate collision")
+            self.update(eid, "QUEUED", candidate_uri="s3://" + bucket + "/" + key,
+                        candidate=candidate, config_diff=release_diff(state["champion"], candidate))
+            if polling_mode():
+                self.claim_labels(self.request(eid), prompt)
+        except ValueError as exc:
+            self.update(eid, "REJECTED", reason=str(exc))
+            return
+        except httpx.HTTPError as exc:
+            # Label movement is part of the durable claim.  A failed claim can
+            # be retried safely next minute and must never reach Jenkins.
+            self.update(eid, "WAITING", reason="Langfuse label claim pending",
+                        label_sync_status="WAITING", label_sync_error=type(exc).__name__)
+            return
+        if polling_mode():
+            # Recommendation is controller-driven: this tick registers and
+            # dispatches only the prepare executor action. Workflow keeps the
+            # legacy long-running delivery path below.
+            from .controller import RecommendationController
+
+            return RecommendationController(self).tick(eid)
+        # A previous ambiguous submit may already exist even if local DB state
+        # was lost before the queue/build identifiers were stored.
+        if self.reconcile_build(self.request(eid)):
+            return
+        with self.db.connect() as c, c.transaction():
+            # Serialize all dispatchers, including duplicate Job pods.
+            c.execute("SELECT pg_advisory_xact_lock(hashtextextended('recsys-release-dispatch',0))")
+            active = c.execute("SELECT experiment_id FROM recsys_ab.trigger_requests WHERE status IN ('DISPATCHING','SUBMITTED','RUNNING') AND experiment_id<>%s", (eid,)).fetchone()
+            if active:
+                c.execute("UPDATE recsys_ab.trigger_requests SET status='WAITING' WHERE experiment_id=%s AND status='QUEUED'", (eid,))
+                return
+            changed = c.execute("UPDATE recsys_ab.trigger_requests SET status='DISPATCHING',submitted_at=now() WHERE experiment_id=%s AND status IN ('QUEUED','WAITING') RETURNING experiment_id", (eid,)).fetchone()
+            if not changed:
+                return
+        job = quote(jenkins_job(scope), safe="")
+        params = jenkins_parameters(
+            scope, row["config"], "s3://" + bucket + "/" + key, current_state_uri
+        )
+        params["EXPERIMENT_ID"] = eid
+        try:
+            response = self.jenkins("/job/" + job + "/buildWithParameters", method="POST", data=params)
+            self.update(eid, "SUBMITTED", queue_id=response.headers.get("location", "").rstrip("/").split("/")[-1])
+        except httpx.HTTPError:
+            self.update(eid, "DISPATCHING", reason="submission response uncertain; reconcile only")
+
+    def reconcile(self):
+        with self.db.connect() as c:
+            rows = c.execute("""SELECT * FROM recsys_ab.trigger_requests
+                WHERE experiment_id LIKE %s AND (
+                  status IN ('QUEUED','WAITING','DISPATCHING','SUBMITTED','RUNNING')
+                  OR (status='NEEDS_ATTENTION' AND build_url IS NOT NULL))
+                ORDER BY created_at LIMIT 100""",
+                (configured_experiment_pattern(),)).fetchall()
+        for row in rows:
+            if row["status"] == "NEEDS_ATTENTION":
+                # An operator may have rolled back after an interrupted build.
+                # Refresh only known delivery evidence, never dispatch/replay.
+                scope = scope_from_experiment(row["experiment_id"])
+                with self.db.session(scope + "-trigger:" + row["experiment_id"]):
+                    current = self.request(row["experiment_id"])
+                    if current and current["status"] == "NEEDS_ATTENTION" and current.get("build_url"):
+                        self.reconcile_build(current)
+                continue
+            if row["status"] in {"QUEUED", "WAITING"}:
+                if polling_mode():
+                    self.dispatch(row["experiment_id"])
+                    continue
+                if not row.get("job_name"):
+                    # An ACKed event whose initial Kubernetes POST was lost must
+                    # still get its deterministic candidate Job before dispatch.
+                    self.ensure_job(row["experiment_id"])
+                    continue
+                # Finite recovery Job may dispatch a waiting request after its original Job finished.
+                self.dispatch(row["experiment_id"])
+            elif row["submitted_at"] and time.time() - row["submitted_at"].timestamp() > 60:
+                self.dispatch(row["experiment_id"])
+
+    def reconcile_model_onboardings(self):
+        """Retire unused 0%-traffic candidates after the reviewed two-hour TTL."""
+        if not polling_mode() or os.environ.get("AB_DISPATCH_ENABLED") != "true":
+            return
+        with self.db.connect() as connection:
+            rows = connection.execute(
+                """SELECT * FROM recsys_ab.model_onboardings
+                   WHERE (status='READY' AND expires_at<=now())
+                      OR (status='EXPIRED' AND cleanup_requested_at IS NOT NULL)
+                   ORDER BY expires_at LIMIT 10"""
+            ).fetchall()
+        state, _ = StateStore(state_uri("recommendation")).read()
+        protected = {item.get("release_id") for item in
+                     (state.get("champion"), state.get("previous")) if item}
+        if state.get("phase") not in {"IDLE", "COMPLETED", "ROLLED_BACK"} and state.get("pending"):
+            protected.add(state["pending"]["release_id"])
+        job_name = os.environ.get("AB_ONBOARDING_JENKINS_JOB", "RecSys-LLM-Candidate-Onboard")
+        job = quote(job_name, safe="")
+
+        def matches(entry, onboarding_id):
+            values = {p.get("name"): p.get("value") for action in entry.get("actions", [])
+                      for p in action.get("parameters", [])}
+            return values.get("ONBOARDING_ID") == onboarding_id and values.get("ACTION") == "cleanup"
+
+        for row in rows:
+            with self.db.connect() as connection:
+                active = connection.execute(
+                    """SELECT 1 FROM recsys_ab.trigger_requests
+                       WHERE candidate->>'release_id'=%s
+                         AND status IN ('QUEUED','WAITING','DISPATCHING','SUBMITTED','RUNNING','HOLD','NEEDS_ATTENTION')
+                       LIMIT 1""",
+                    (row["candidate_release_id"],),
+                ).fetchone()
+            if active or row["candidate_release_id"] in protected:
+                continue  # TTL is suspended while a release has a live owner.
+            builds = self.jenkins(
+                "/job/" + job + "/api/json",
+                params={"tree": "builds[number,url,building,result,actions[parameters[name,value]]]{0,100}"},
+            ).json().get("builds", [])
+            queued = self.jenkins(
+                "/queue/api/json",
+                params={"tree": "items[id,task[name],actions[parameters[name,value]]]"},
+            ).json().get("items", [])
+            found = [entry for entry in builds if matches(entry, row["onboarding_id"])]
+            waiting = [entry for entry in queued if entry.get("task", {}).get("name") == job_name
+                       and matches(entry, row["onboarding_id"])]
+            if len(found) + len(waiting) > 1:
+                with self.db.connect() as connection:
+                    connection.execute(
+                        """UPDATE recsys_ab.model_onboardings SET status='BLOCKED',
+                           reason='multiple cleanup deliveries found',updated_at=now()
+                           WHERE onboarding_id=%s""", (row["onboarding_id"],))
+                continue
+            if found or waiting:
+                continue
+            if row["cleanup_requested_at"] is not None:
+                # A recorded submit intent with no observable delivery is
+                # ambiguous. Never create a second cleanup build blindly.
+                continue
+            with self.db.connect() as connection:
+                changed = connection.execute(
+                    """UPDATE recsys_ab.model_onboardings
+                       SET status='EXPIRED',cleanup_requested_at=now(),updated_at=now()
+                       WHERE onboarding_id=%s AND status='READY' AND cleanup_requested_at IS NULL
+                       RETURNING onboarding_id""", (row["onboarding_id"],)).fetchone()
+            if not changed:
+                continue
+            params = {
+                "ACTION": "cleanup",
+                "ONBOARDING_ID": row["onboarding_id"],
+                "INTENT_URI": row["intent_uri"],
+                "ROUTER_IMAGE": os.environ["AB_RECOMMENDATION_ROUTER_IMAGE"],
+            }
+            try:
+                self.jenkins("/job/" + job + "/buildWithParameters", method="POST", data=params)
+            except httpx.HTTPError:
+                # Next tick reconciles queue/build history only. A human can
+                # resolve a truly lost delivery without risking double action.
+                pass
+
+    def poll(self):
+        if not polling_mode():
+            raise ValueError("poll action is restricted to Recommendation")
+        with self.db.session("recommendation-langfuse-poller"):
+            # Recovery is always first. Terminal label sync is delivery-only
+            # and never creates a Jenkins build or model invocation.
+            from .controller import RecommendationController
+
+            controller = RecommendationController(self)
+            controller.reconcile_actions()
+            self.sync_terminal_labels()
+            self.reconcile_model_onboardings()
+            with self.db.connect() as c:
+                active = c.execute("""SELECT experiment_id FROM recsys_ab.trigger_requests
+                    WHERE experiment_id LIKE 'rec-%%' AND (
+                      status IN ('DISPATCHING','SUBMITTED','RUNNING','HOLD','NEEDS_ATTENTION')
+                      OR (status IN ('QUEUED','WAITING') AND label_state->'candidate' ? 'ab-running'))
+                    LIMIT 1""").fetchone()
+            state, _ = StateStore(state_uri("recommendation")).read()
+            if active:
+                result = controller.tick(active["experiment_id"])
+                self.db.record_controller_tick(
+                    active["experiment_id"], result.get("action") or result["status"],
+                    result.get("reason"),
+                )
+                self.sync_terminal_labels()
+                return result
+            cleanup_pending = (
+                state.get("cleanup")
+                and state["cleanup"].get("status") != "CLEANED"
+            )
+            if (
+                cleanup_pending
+                or state["phase"] not in {"IDLE", "COMPLETED", "ROLLED_BACK"}
+            ):
+                eid = state.get("experiment_id")
+                row = self.request(eid) if eid else None
+                if row:
+                    result = controller.tick(eid)
+                    self.db.record_controller_tick(
+                        eid, result.get("action") or result["status"], result.get("reason")
+                    )
+                    self.sync_terminal_labels()
+                    return result
+                return {"status": "BUSY", "experiment_id": eid}
+            parking_version = int(os.environ["AB_LANGFUSE_PARKING_VERSION"])
+            accepted = []
+            dispatched = None
+            for prompt in self.ready_prompts():
+                if prompt.get("version") == parking_version:
+                    continue
+                eid = self.persist_polled_prompt(prompt)
+                if not eid:
+                    break
+                accepted.append(eid)
+                dispatched = self.dispatch(eid)
+                if isinstance(dispatched, dict):
+                    self.db.record_controller_tick(
+                        eid, dispatched.get("action") or dispatched.get("status", "prepare"),
+                        dispatched.get("reason"),
+                    )
+                # A label is a single pointer today, but stop after one exact
+                # version even if a future API returns multiple candidates.
+                break
+            self.sync_terminal_labels()
+            return dispatched or {"status": "DISPATCHED" if accepted else "IDLE",
+                                  "experiment_id": accepted[0] if accepted else None}
