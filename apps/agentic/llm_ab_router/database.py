@@ -165,10 +165,79 @@ class Database:
 
 
 
+    def create_controller_action(self, row):
+        """Persist one immutable controller decision before Jenkins delivery."""
+        required = {
+            "action_key", "experiment_id", "action", "target_weight",
+            "expected_phase", "expected_state_etag",
+        }
+        if set(row) != required:
+            raise ValueError("invalid controller action")
+        with self.connect() as c:
+            created = c.execute(
+                """INSERT INTO recsys_ab.controller_actions
+                   (action_key,experiment_id,action,target_weight,expected_phase,
+                    expected_state_etag,status)
+                   VALUES (%s,%s,%s,%s,%s,%s,'INTENT')
+                   ON CONFLICT DO NOTHING RETURNING *""",
+                tuple(row[key] for key in (
+                    "action_key", "experiment_id", "action", "target_weight",
+                    "expected_phase", "expected_state_etag",
+                )),
+            ).fetchone()
+            if created:
+                return dict(created), True
+            existing = c.execute(
+                "SELECT * FROM recsys_ab.controller_actions WHERE action_key=%s",
+                (row["action_key"],),
+            ).fetchone()
+            if not existing or any(
+                existing[key] != row[key] for key in required
+            ):
+                raise ValueError("controller action identity conflict")
+            return dict(existing), False
 
+    def controller_action(self, action_key):
+        with self.connect() as c:
+            row = c.execute(
+                "SELECT * FROM recsys_ab.controller_actions WHERE action_key=%s",
+                (action_key,),
+            ).fetchone()
+        return dict(row) if row else None
 
+    def latest_controller_action(self, experiment_id):
+        with self.connect() as c:
+            row = c.execute(
+                """SELECT * FROM recsys_ab.controller_actions
+                   WHERE experiment_id=%s ORDER BY created_at DESC LIMIT 1""",
+                (experiment_id,),
+            ).fetchone()
+        return dict(row) if row else None
 
+    def record_controller_tick(self, experiment_id, decision, reason=None):
+        with self.connect() as c:
+            c.execute(
+                """INSERT INTO recsys_ab.controller_status
+                   (experiment_id,decision,reason,last_tick_at) VALUES (%s,%s,%s,now())
+                   ON CONFLICT(experiment_id) DO UPDATE SET decision=excluded.decision,
+                   reason=excluded.reason,last_tick_at=excluded.last_tick_at""",
+                (experiment_id, str(decision)[:64], (reason or "")[:160] or None),
+            )
 
+    def update_controller_action(self, action_key, status, **values):
+        allowed = {"queue_id", "build_number", "build_url", "reason"}
+        if set(values) - allowed:
+            raise ValueError("invalid controller action update")
+        fields = ["status=%s", "updated_at=now()"] + [key + "=%s" for key in values]
+        with self.connect() as c:
+            row = c.execute(
+                "UPDATE recsys_ab.controller_actions SET " + ",".join(fields)
+                + " WHERE action_key=%s RETURNING *",
+                (status, *values.values(), action_key),
+            ).fetchone()
+        if not row:
+            raise ValueError("unknown controller action")
+        return dict(row)
 
 
 
