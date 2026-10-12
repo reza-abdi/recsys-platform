@@ -533,4 +533,32 @@ def create_app(mode=None, database=None, store=None, client=None):
             raise HTTPException(409, "release quarantined; start a new session")
         return {"release_id": rid}
 
+    @app.get("/internal/verify")
+    def verify(request: Request, release_id: str):
+        auth(request)
+        if mode != "router":
+            raise HTTPException(404)
+        response = http.get(
+            os.environ["AB_GATEWAY_URL"].rstrip("/") + "/identity",
+            headers={**headers(request), "x-recsys-release": release_id},
+        )
+        return JSONResponse(response.json(), status_code=response.status_code)
+
+    @app.get("/internal/experiments/{eid}/evidence")
+    def experiment_evidence(eid: str, request: Request):
+        auth(request)
+        if mode != "router" or scope != "workflow":
+            raise HTTPException(404)
+        snapshot, _ = state_store.read()
+        if snapshot.get("experiment_id", "baseline") != eid:
+            reference = next((r for r in reversed(snapshot.get("history", [])) if r["experiment_id"] == eid), None)
+            if reference is None:
+                raise HTTPException(404, "unknown workflow experiment")
+            snapshot = state_store.read_archive(reference)
+        from .workflow_events import snapshot_events
+        return {"experiment_id": eid, "phase": snapshot["phase"],
+                "gate": snapshot.get("gate"), "policy_checksum": snapshot.get("policy_checksum"),
+                "gate_windows": snapshot.get("gate_windows", []), "events": snapshot_events(snapshot),
+                "post_promotion_monitoring": False}
+
     return app
