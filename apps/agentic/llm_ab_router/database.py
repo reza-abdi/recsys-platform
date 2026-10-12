@@ -573,8 +573,96 @@ class Database:
         return {"run": dict(run) if run else None,
                 "tickets": {row["status"]: row["count"] for row in rows}}
 
+    def source_inflight(self, experiment_id, source):
+        with self.connect() as c:
+            return c.execute(
+                """SELECT count(*) AS n FROM recsys_ab.invocations
+                   WHERE experiment_id=%s AND source=%s AND finished_at IS NULL""",
+                (experiment_id, source),
+            ).fetchone()["n"]
 
+    def retire_terminal_sessions(self, disabled_release_ids=()):
+        """Close disposable sessions and return releases that still need serving.
 
+        Old rows did not record their source.  Backfill them from durable
+        invocation evidence, preferring production if a legacy session was
+        ever used by more than one source.  Unknown and unfinished sessions
+        remain protected; cleanup never guesses that they are disposable.
+        """
+        disabled = sorted(set(disabled_release_ids))
+        with self.connect() as c, c.transaction():
+            c.execute(
+                """WITH inferred AS (
+                     SELECT s.session_key,
+                       CASE
+                         WHEN bool_or(i.source='production') THEN 'production'
+                         WHEN bool_or(i.source='live_test') THEN 'live_test'
+                         WHEN bool_or(i.source='synthetic') THEN 'synthetic'
+                       END AS source
+                     FROM recsys_ab.sessions s
+                     LEFT JOIN recsys_ab.invocations i USING(session_key)
+                     WHERE s.source IS NULL
+                     GROUP BY s.session_key
+                   )
+                   UPDATE recsys_ab.sessions s SET source=inferred.source
+                   FROM inferred
+                   WHERE s.session_key=inferred.session_key
+                     AND s.source IS NULL AND inferred.source IS NOT NULL"""
+            )
+            closed = c.execute(
+                """UPDATE recsys_ab.sessions s
+                   SET closed_at=now(),
+                       close_reason=CASE WHEN release_id=ANY(%s::text[])
+                         THEN 'release_quarantined' ELSE 'terminal_test_session' END
+                   WHERE closed_at IS NULL
+                     AND NOT EXISTS (
+                       SELECT 1 FROM recsys_ab.invocations i
+                       WHERE i.session_key=s.session_key AND i.finished_at IS NULL
+                     )
+                     AND (source IN ('synthetic','live_test') OR release_id=ANY(%s::text[]))
+                   RETURNING release_id,source,close_reason""",
+                (disabled, disabled),
+            ).fetchall()
+            active = c.execute(
+                """SELECT release_id,source,count(*) AS sessions
+                   FROM recsys_ab.sessions
+                   WHERE closed_at IS NULL
+                     AND (expires_at IS NULL OR expires_at>now())
+                   GROUP BY release_id,source"""
+            ).fetchall()
+            unfinished = c.execute(
+                """SELECT release_id,count(*) AS invocations
+                   FROM recsys_ab.invocations WHERE finished_at IS NULL
+                   GROUP BY release_id"""
+            ).fetchall()
+            closed_total = c.execute(
+                "SELECT count(*) AS sessions FROM recsys_ab.sessions WHERE closed_at IS NOT NULL"
+            ).fetchone()["sessions"]
+        protected = {row["release_id"] for row in active}
+        protected.update(row["release_id"] for row in unfinished)
+        by_reason = {}
+        for row in closed:
+            reason = row["close_reason"]
+            by_reason[reason] = by_reason.get(reason, 0) + 1
+        return {
+            "closed": len(closed),
+            "closed_total": closed_total,
+            "closed_by_reason": by_reason,
+            "active_sessions": sum(row["sessions"] for row in active),
+            "unfinished_invocations": sum(row["invocations"] for row in unfinished),
+            "protected_release_ids": sorted(protected),
+        }
+
+    def synthetic_suite_complete(self, experiment_id, expected):
+        with self.connect() as c:
+            row = c.execute(
+                """SELECT count(*) AS total,
+                          count(*) FILTER (WHERE finished_at IS NOT NULL) AS completed
+                   FROM recsys_ab.invocations
+                   WHERE experiment_id=%s AND source='synthetic'""",
+                (experiment_id,),
+            ).fetchone()
+        return row["total"] == expected and row["completed"] == expected
 
     def migrate(self):
         with self.connect() as c:
@@ -588,3 +676,116 @@ class Database:
                 c.execute(
                     "SELECT pg_advisory_unlock(hashtextextended('recsys-ab-schema', 0))"
                 )
+
+    @contextmanager
+    def session(self, key):
+        with self.connect() as c:
+            # Session-level lock survives autocommit; claim is committed BEFORE HTTP.
+            c.execute("SELECT pg_advisory_lock(hashtextextended(%s, 0))", (key,))
+            try:
+                yield c
+            finally:
+                c.execute("SELECT pg_advisory_unlock(hashtextextended(%s, 0))", (key,))
+
+    def result(self, key):
+        with self.connect() as c:
+            row = c.execute(
+                "SELECT result FROM recsys_ab.invocations WHERE request_key=%s", (key,)
+            ).fetchone()
+            if not row or row["result"] is None:
+                return None
+            result = dict(row["result"])
+            ev = c.execute("SELECT evaluation, confirmed_at FROM recsys_ab.evaluation_outbox WHERE request_key=%s", (key,)).fetchone()
+            if ev:
+                result["evaluation"] = {"verdict": (ev["evaluation"] or {}).get("verdict", "HOLD"),
+                    "evaluator_version": (ev["evaluation"] or {}).get("evaluator_version"),
+                    "synced": ev["confirmed_at"] is not None}
+                if ev['evaluation']:
+                    result['evaluation_evidence'] = ev['evaluation']
+            return result
+
+    def complete(self, key, evidence, response, task_id, evaluation=None):
+        with self.connect() as c:
+            with c.transaction():
+                c.execute(
+                    "UPDATE recsys_ab.invocations SET finished_at=now(), result=%s, response=%s, task_id=%s WHERE request_key=%s",
+                    (Jsonb(evidence), Jsonb(response), task_id, key),
+                )
+                if evaluation is not None:
+                    c.execute("""INSERT INTO recsys_ab.evaluation_outbox(request_key,experiment_id,snapshot,metadata)
+                        SELECT request_key,experiment_id,%s,%s FROM recsys_ab.invocations
+                        WHERE request_key=%s AND source='synthetic' ON CONFLICT(request_key) DO NOTHING""",
+                        (Jsonb(evaluation["snapshot"]), Jsonb(evaluation["metadata"]), key))
+                    saved = c.execute("SELECT snapshot,metadata FROM recsys_ab.evaluation_outbox WHERE request_key=%s", (key,)).fetchone()
+                    if not saved or saved["snapshot"] != evaluation["snapshot"] or saved["metadata"] != evaluation["metadata"]:
+                        raise ValueError("immutable evaluation snapshot conflict")
+
+    def observe(self, state, start, end, source=None):
+        source = source or state["policy"].get("sample_source", "production")
+        with self.connect() as c:
+            heartbeat = c.execute(
+                "SELECT extract(epoch FROM max(seen_at)) AS at FROM recsys_ab.heartbeat WHERE instance LIKE %s",
+                ("recsys-workflow-router%" if os.environ.get("AB_SCOPE") == "workflow" else "recsys-ab-router%",)
+            ).fetchone()["at"]
+            rows = c.execute(
+                """
+              SELECT release_id, count(*) FILTER(WHERE finished_at IS NOT NULL) AS count,
+                count(*) FILTER(WHERE (result->>'error')::boolean) AS errors,
+                count(*) FILTER(WHERE (result->>'contract_failure')::boolean) AS contract_failures,
+                count(*) FILTER(WHERE result IS NULL OR result->>'verdict'='HOLD') AS unknown,
+                percentile_cont(0.95) WITHIN GROUP(ORDER BY extract(epoch FROM finished_at-started_at)) AS p95
+              FROM recsys_ab.invocations
+              WHERE experiment_id=%s AND source=%s
+                AND ((finished_at >= to_timestamp(%s) AND finished_at < to_timestamp(%s)
+                      AND (%s OR started_at >= to_timestamp(%s)))
+                     OR (finished_at IS NULL AND started_at < to_timestamp(%s)))
+              GROUP BY release_id
+            """,
+                (
+                    state["experiment_id"],
+                    source,
+                    start,
+                    end,
+                    state["phase"] == "MONITOR",
+                    start,
+                    end - state["policy"]["request_timeout_seconds"],
+                ),
+            ).fetchall()
+        empty = {
+            "count": 0,
+            "errors": 0,
+            "contract_failures": 0,
+            "unknown": 0,
+            "p95": None,
+        }
+        return {
+            "healthy": heartbeat is not None
+            and end - float(heartbeat) <= state["policy"]["telemetry_max_age_seconds"],
+            **{
+                arm: next(
+                    (
+                        dict(r)
+                        for r in rows
+                        if r["release_id"] == state[key]["release_id"]
+                    ),
+                    dict(empty),
+                )
+                for arm, key in (("champion", "baseline"), ("candidate", "pending"))
+            },
+        }
+
+    def metrics(self):
+        with self.connect() as c:
+            return c.execute("""SELECT experiment_id, source, release_id,
+              coalesce(result->>'verdict','STARTED') AS verdict, count(*) AS count,
+              count(*) FILTER(WHERE (result->>'error')::boolean) AS errors,
+              count(*) FILTER(WHERE (result->>'contract_failure')::boolean) AS contract_failures,
+              count(DISTINCT session_key) AS sessions,
+              sum((result->>'input_tokens')::bigint) AS input_tokens,
+              sum((result->>'output_tokens')::bigint) AS output_tokens,
+              percentile_cont(0.95) WITHIN GROUP(ORDER BY extract(epoch FROM finished_at-started_at)) AS p95
+              FROM recsys_ab.invocations GROUP BY 1,2,3,4""").fetchall()
+
+
+def json_label(value):
+    return json.dumps(str(value), ensure_ascii=True)
