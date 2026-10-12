@@ -315,9 +315,91 @@ class Database:
                 (status, (reason or "")[:160] or None, experiment_id),
             )
 
+    def issue_live_ticket(self, claims):
+        """Persist a live request intent and consume its bounded budget once."""
+        with self.connect() as c, c.transaction():
+            run = c.execute(
+                "SELECT * FROM recsys_ab.traffic_runs WHERE experiment_id=%s FOR UPDATE",
+                (claims["experiment_id"],),
+            ).fetchone()
+            if not run or run["status"] != "RUNNING" or run["live_submitted"] >= 360:
+                return None
+            sequence = run["live_submitted"] + 1
+            c.execute(
+                """INSERT INTO recsys_ab.live_traffic_tickets
+                   (request_id,experiment_id,sequence,phase,nonce,prompt_sha256,
+                    expires_at,status) VALUES (%s,%s,%s,%s,%s,%s,to_timestamp(%s),
+                    'DISPATCH_INTENT')""",
+                (
+                    claims["request_id"], claims["experiment_id"], sequence,
+                    claims["phase"], claims["nonce"], claims["prompt_sha256"],
+                    claims["expires_at"],
+                ),
+            )
+            c.execute(
+                """UPDATE recsys_ab.traffic_runs SET live_submitted=%s,
+                   updated_at=now() WHERE experiment_id=%s""",
+                (sequence, claims["experiment_id"]),
+            )
+            return sequence
 
+    def claim_live_ticket(self, claims):
+        with self.connect() as c, c.transaction():
+            row = c.execute(
+                """SELECT * FROM recsys_ab.live_traffic_tickets
+                   WHERE request_id=%s FOR UPDATE""",
+                (claims["request_id"],),
+            ).fetchone()
+            if not row or any(
+                str(row[key]) != str(claims[key])
+                for key in ("experiment_id", "phase", "nonce", "prompt_sha256")
+            ) or int(row["expires_at"].timestamp()) != claims["expires_at"]:
+                raise ValueError("live ticket is not registered")
+            if row["status"] != "DISPATCH_INTENT":
+                raise ValueError("live ticket already claimed; do not replay")
+            c.execute(
+                """UPDATE recsys_ab.live_traffic_tickets SET status='CLAIMED',
+                   claimed_at=now() WHERE request_id=%s""",
+                (claims["request_id"],),
+            )
 
+    def finish_live_ticket(self, request_id, status, *, http_status=None,
+                           response_checksum=None, latency_seconds=None,
+                           edge_revision=None, last_error=None):
+        if status not in {"COMPLETED", "AMBIGUOUS", "REJECTED"}:
+            raise ValueError("invalid live ticket state")
+        with self.connect() as c:
+            row = c.execute(
+                """UPDATE recsys_ab.live_traffic_tickets SET status=%s,
+                   finished_at=now(),http_status=%s,response_checksum=%s,
+                   latency_seconds=%s,edge_revision=%s,last_error=%s
+                   WHERE request_id=%s AND status IN ('DISPATCH_INTENT','CLAIMED')
+                   RETURNING request_id""",
+                (
+                    status, http_status, response_checksum, latency_seconds,
+                    edge_revision, (last_error or "")[:120] or None, request_id,
+                ),
+            ).fetchone()
+        if not row:
+            raise ValueError("live ticket is not pending")
 
+    def mark_live_ambiguous(self, request_id, last_error):
+        """Seal a client-side unknown result without overwriting edge evidence."""
+        with self.connect() as c:
+            row = c.execute(
+                """UPDATE recsys_ab.live_traffic_tickets SET status='AMBIGUOUS',
+                   finished_at=now(),last_error=%s
+                   WHERE request_id=%s AND status IN ('DISPATCH_INTENT','CLAIMED')
+                   RETURNING status""",
+                ((last_error or "transport")[:120], request_id),
+            ).fetchone()
+            if row:
+                return row["status"]
+            existing = c.execute(
+                "SELECT status FROM recsys_ab.live_traffic_tickets WHERE request_id=%s",
+                (request_id,),
+            ).fetchone()
+        return existing["status"] if existing else None
 
     def traffic_evidence(self, experiment_id):
         with self.connect() as c:
@@ -336,11 +418,160 @@ class Database:
             "external": self.external_suite(experiment_id),
         }
 
+    def begin_external_suite(self, experiment_id, fixture_checksum, tickets):
+        """Create the immutable 20-ticket suite once; an existing suite is never resent."""
+        if len(tickets) != 20 or len({row["case_id"] for row in tickets}) != 20:
+            raise ValueError("external suite requires exactly 20 unique cases")
+        with self.connect() as c, c.transaction():
+            created = c.execute(
+                """INSERT INTO recsys_ab.external_case_runs
+                   (experiment_id,fixture_checksum,status) VALUES (%s,%s,'DISPATCHING')
+                   ON CONFLICT DO NOTHING RETURNING experiment_id""",
+                (experiment_id, fixture_checksum),
+            ).fetchone()
+            if created:
+                for row in tickets:
+                    c.execute(
+                        """INSERT INTO recsys_ab.external_case_tickets
+                           (experiment_id,case_id,request_id,nonce,fixture_checksum,
+                            prompt_sha256,expires_at,status)
+                           VALUES (%s,%s,%s,%s,%s,%s,to_timestamp(%s),'ISSUED')""",
+                        (experiment_id, row["case_id"], row["request_id"], row["nonce"],
+                         fixture_checksum, row["prompt_sha256"], row["expires_at"]),
+                    )
+                c.execute(
+                    """UPDATE recsys_ab.traffic_runs SET synthetic_submitted=20,
+                       updated_at=now() WHERE experiment_id=%s""",
+                    (experiment_id,),
+                )
+                return True
+            run = c.execute(
+                "SELECT fixture_checksum FROM recsys_ab.external_case_runs WHERE experiment_id=%s",
+                (experiment_id,),
+            ).fetchone()
+            existing = c.execute(
+                """SELECT case_id,request_id,nonce,fixture_checksum,prompt_sha256,
+                          extract(epoch FROM expires_at)::bigint AS expires_at
+                   FROM recsys_ab.external_case_tickets WHERE experiment_id=%s
+                   ORDER BY case_id""",
+                (experiment_id,),
+            ).fetchall()
+            expected = sorted(
+                [{key: row[key] for key in (
+                    "case_id", "request_id", "nonce", "prompt_sha256", "expires_at"
+                 )} | {"fixture_checksum": fixture_checksum} for row in tickets],
+                key=lambda row: row["case_id"],
+            )
+            if not run or run["fixture_checksum"] != fixture_checksum or [dict(r) for r in existing] != expected:
+                raise ValueError("external suite immutable identity conflict")
+            return False
 
+    def mark_ticket_intent(self, experiment_id, case_id):
+        with self.connect() as c:
+            row = c.execute(
+                """UPDATE recsys_ab.external_case_tickets
+                   SET status='DISPATCH_INTENT',intent_at=now()
+                   WHERE experiment_id=%s AND case_id=%s AND status='ISSUED'
+                   RETURNING request_id""",
+                (experiment_id, case_id),
+            ).fetchone()
+            if not row:
+                raise ValueError("ticket is not issuable; do not replay")
+            return row["request_id"]
 
+    def claim_external_ticket(self, claims):
+        with self.connect() as c, c.transaction():
+            row = c.execute(
+                """SELECT * FROM recsys_ab.external_case_tickets
+                   WHERE experiment_id=%s AND case_id=%s FOR UPDATE""",
+                (claims["experiment_id"], claims["case_id"]),
+            ).fetchone()
+            if not row or any(
+                str(row[key]) != str(claims[key])
+                for key in ("request_id", "nonce", "fixture_checksum", "prompt_sha256")
+            ) or int(row["expires_at"].timestamp()) != claims["expires_at"]:
+                raise ValueError("ticket is not registered")
+            if row["status"] != "DISPATCH_INTENT":
+                raise ValueError("ticket already claimed; do not replay")
+            c.execute(
+                """UPDATE recsys_ab.external_case_tickets
+                   SET status='CLAIMED',claimed_at=now()
+                   WHERE experiment_id=%s AND case_id=%s""",
+                (claims["experiment_id"], claims["case_id"]),
+            )
 
+    def finish_external_ticket(self, experiment_id, case_id, status, *,
+                               http_status=None, response_checksum=None, latency_seconds=None,
+                               edge_revision=None, last_error=None):
+        if status not in {"COMPLETED", "AMBIGUOUS", "REJECTED"}:
+            raise ValueError("invalid terminal ticket state")
+        safe_error = (last_error or "")[:120] or None
+        with self.connect() as c, c.transaction():
+            row = c.execute(
+                """UPDATE recsys_ab.external_case_tickets SET status=%s,
+                   finished_at=now(),http_status=%s,response_checksum=%s,
+                   latency_seconds=%s,edge_revision=%s,last_error=%s
+                   WHERE experiment_id=%s AND case_id=%s AND status='CLAIMED'
+                   RETURNING experiment_id""",
+                (status, http_status, response_checksum, latency_seconds,
+                 edge_revision, safe_error, experiment_id, case_id),
+            ).fetchone()
+            if not row:
+                raise ValueError("ticket is not claimed")
+            counts = c.execute(
+                """SELECT count(*) FILTER(WHERE status='COMPLETED') AS completed,
+                          count(*) FILTER(WHERE status IN ('AMBIGUOUS','REJECTED')) AS failed,
+                          count(*) AS total
+                   FROM recsys_ab.external_case_tickets WHERE experiment_id=%s""",
+                (experiment_id,),
+            ).fetchone()
+            if counts["completed"] + counts["failed"] == counts["total"] == 20:
+                c.execute(
+                    """UPDATE recsys_ab.external_case_runs
+                       SET status=%s,finished_at=now() WHERE experiment_id=%s""",
+                    ("COMPLETED" if counts["completed"] == 20 else "HOLD", experiment_id),
+                )
 
+    def mark_external_ambiguous(self, experiment_id, case_id, last_error):
+        """Record an uncertain public transport result without permitting replay."""
+        with self.connect() as c, c.transaction():
+            row = c.execute(
+                """UPDATE recsys_ab.external_case_tickets
+                   SET status='AMBIGUOUS',finished_at=now(),last_error=%s
+                   WHERE experiment_id=%s AND case_id=%s
+                     AND status IN ('DISPATCH_INTENT','CLAIMED')
+                   RETURNING experiment_id""",
+                ((last_error or "transport")[:120], experiment_id, case_id),
+            ).fetchone()
+            if not row:
+                return
+            counts = c.execute(
+                """SELECT count(*) FILTER(WHERE status IN ('COMPLETED','AMBIGUOUS','REJECTED')) AS terminal,
+                          count(*) FILTER(WHERE status='COMPLETED') AS completed,
+                          count(*) AS total
+                   FROM recsys_ab.external_case_tickets WHERE experiment_id=%s""",
+                (experiment_id,),
+            ).fetchone()
+            if counts["terminal"] == counts["total"] == 20:
+                c.execute(
+                    """UPDATE recsys_ab.external_case_runs SET status=%s,finished_at=now()
+                       WHERE experiment_id=%s""",
+                    ("COMPLETED" if counts["completed"] == 20 else "HOLD", experiment_id),
+                )
 
+    def external_suite(self, experiment_id):
+        with self.connect() as c:
+            run = c.execute(
+                "SELECT * FROM recsys_ab.external_case_runs WHERE experiment_id=%s",
+                (experiment_id,),
+            ).fetchone()
+            rows = c.execute(
+                """SELECT status,count(*) AS count FROM recsys_ab.external_case_tickets
+                   WHERE experiment_id=%s GROUP BY status""",
+                (experiment_id,),
+            ).fetchall()
+        return {"run": dict(run) if run else None,
+                "tickets": {row["status"]: row["count"] for row in rows}}
 
 
 
