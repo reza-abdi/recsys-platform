@@ -163,7 +163,20 @@ class Database:
     def connect(self):
         return psycopg.connect(self.dsn, autocommit=True, row_factory=dict_row)
 
+    def claim_live_load(self, experiment_id):
+        # A replacement Pod/Job cannot obtain a fresh 360-request budget.
+        # An ambiguous previous owner is deliberately not resumed or replayed.
+        with self.connect() as c:
+            return c.execute("""INSERT INTO recsys_ab.live_load_runs(experiment_id)
+                VALUES (%s) ON CONFLICT DO NOTHING RETURNING experiment_id""",
+                (experiment_id,)).fetchone() is not None
 
+    def claim_live_request(self, experiment_id):
+        with self.connect() as c:
+            row = c.execute("""UPDATE recsys_ab.live_load_runs SET submitted=submitted+1
+                WHERE experiment_id=%s AND submitted<360 RETURNING submitted""",
+                (experiment_id,)).fetchone()
+            return row['submitted'] if row else None
 
     def create_controller_action(self, row):
         """Persist one immutable controller decision before Jenkins delivery."""
@@ -239,15 +252,89 @@ class Database:
             raise ValueError("unknown controller action")
         return dict(row)
 
+    def begin_traffic_run(self, experiment_id, job_name, manifest_checksum):
+        """Claim the one lifetime Traffic Job for an experiment."""
+        with self.connect() as c:
+            created = c.execute(
+                """INSERT INTO recsys_ab.traffic_runs
+                   (experiment_id,job_name,manifest_checksum,status)
+                   VALUES (%s,%s,%s,'CREATED') ON CONFLICT DO NOTHING RETURNING *""",
+                (experiment_id, job_name, manifest_checksum),
+            ).fetchone()
+            if created:
+                return dict(created), True
+            existing = c.execute(
+                "SELECT * FROM recsys_ab.traffic_runs WHERE experiment_id=%s",
+                (experiment_id,),
+            ).fetchone()
+            if (
+                not existing
+                or existing["job_name"] != job_name
+                or existing["manifest_checksum"] != manifest_checksum
+            ):
+                raise ValueError("traffic run immutable identity conflict")
+            return dict(existing), False
+
+    def traffic_run(self, experiment_id):
+        with self.connect() as c:
+            row = c.execute(
+                "SELECT * FROM recsys_ab.traffic_runs WHERE experiment_id=%s",
+                (experiment_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def trigger_status(self, experiment_id):
+        """Return controller-owned trigger lifecycle state for a Traffic Job."""
+        with self.connect() as c:
+            row = c.execute(
+                "SELECT status FROM recsys_ab.trigger_requests WHERE experiment_id=%s",
+                (experiment_id,),
+            ).fetchone()
+        return row["status"] if row else None
+
+    def heartbeat_traffic_run(self, experiment_id, phase):
+        with self.connect() as c:
+            row = c.execute(
+                """UPDATE recsys_ab.traffic_runs SET status='RUNNING',phase=%s,
+                   started_at=coalesce(started_at,now()),heartbeat_at=now(),updated_at=now()
+                   WHERE experiment_id=%s AND status IN ('CREATED','RUNNING')
+                   RETURNING *""",
+                (phase, experiment_id),
+            ).fetchone()
+        if not row:
+            raise ValueError("traffic run is not runnable")
+        return dict(row)
+
+    def finish_traffic_run(self, experiment_id, status, reason=None):
+        if status not in {"COMPLETED", "FAILED", "LOST", "NEEDS_ATTENTION"}:
+            raise ValueError("invalid traffic run terminal status")
+        with self.connect() as c:
+            c.execute(
+                """UPDATE recsys_ab.traffic_runs SET status=%s,reason=%s,
+                   finished_at=now(),updated_at=now() WHERE experiment_id=%s""",
+                (status, (reason or "")[:160] or None, experiment_id),
+            )
 
 
 
 
 
-
-
-
-
+    def traffic_evidence(self, experiment_id):
+        with self.connect() as c:
+            run = c.execute(
+                "SELECT * FROM recsys_ab.traffic_runs WHERE experiment_id=%s",
+                (experiment_id,),
+            ).fetchone()
+            rows = c.execute(
+                """SELECT status,count(*) AS count FROM recsys_ab.live_traffic_tickets
+                   WHERE experiment_id=%s GROUP BY status""",
+                (experiment_id,),
+            ).fetchall()
+        return {
+            "run": dict(run) if run else None,
+            "live_tickets": {row["status"]: row["count"] for row in rows},
+            "external": self.external_suite(experiment_id),
+        }
 
 
 
