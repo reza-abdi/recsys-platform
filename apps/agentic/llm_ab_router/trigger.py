@@ -556,3 +556,150 @@ class Trigger:
                 # Do not include response bodies or credentials in durable errors.
                 self.update(row["experiment_id"], row["status"],
                             label_sync_status="WAITING", label_sync_error=type(exc).__name__)
+
+    def accept(self, raw, signature):
+        valid, timestamp = signature_valid(raw, signature, os.environ["LANGFUSE_WEBHOOK_SECRET"])
+        if not valid:
+            raise HTTPException(401, "invalid signature")
+        body = json.loads(raw)
+        if not isinstance(body, dict):
+            raise HTTPException(400, "webhook must be an object")
+        if body.get("type") != "prompt-version" or body.get("apiVersion", "v1") != "v1":
+            raise HTTPException(400, "unsupported webhook schema")
+        event_id = body.get("id")
+        if not isinstance(event_id, str) or not 1 <= len(event_id) <= 128:
+            raise HTTPException(400, "event ID required")
+        checksum = hashlib.sha256(raw).hexdigest()
+        with self.db.connect() as c:
+            existing = c.execute("SELECT * FROM recsys_ab.trigger_events WHERE event_id=%s", (event_id,)).fetchone()
+        if existing:
+            if existing["payload_hash"] != checksum:
+                raise HTTPException(409, "event ID collision")
+            return {"experiment_id": existing["experiment_id"], "duplicate": True}
+        if abs(time.time() - timestamp) > 300:
+            raise HTTPException(401, "expired event")
+        p = body.get("prompt", {})
+        if not isinstance(p, dict):
+            raise HTTPException(400, "prompt must be an object")
+        if not isinstance(p.get("labels", []), list) or not all(isinstance(label, str) for label in p.get("labels", [])):
+            raise HTTPException(400, "labels must be an array of strings")
+        if p.get("projectId") != os.environ["LANGFUSE_PROJECT_ID"] or p.get("name") != os.environ["AB_LANGFUSE_PROMPT"]:
+            raise HTTPException(403, "prompt/project not allowed")
+        if body.get("action") not in {"created", "updated"} or "ab-ready" not in p.get("labels", []):
+            return {"ignored": True}
+        if type(p.get("version")) is not int or p["version"] < 1:
+            raise HTTPException(400, "positive prompt version required")
+        prompt = self.prompt(p["name"], p["version"])
+        if "ab-ready" not in prompt.get("labels", []):
+            return {"ignored": True}
+        config = validate_config(prompt["config"])
+        configured_scope = os.environ.get("AB_TRIGGER_SCOPE")
+        if configured_scope and config["scope"] != configured_scope:
+            raise HTTPException(403, "prompt scope is not allowed by this receiver")
+        scope = config["scope"]
+        immutable_checksum = prompt_checksum(p["projectId"], prompt)
+        eid = target(scope)["prefix"] + "-" + digest([p["projectId"], p["name"], p["version"]])[:32]
+        with self.db.connect() as c, c.transaction():
+            c.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (scope + "-webhook:" + event_id,))
+            existing = c.execute("SELECT * FROM recsys_ab.trigger_events WHERE event_id=%s", (event_id,)).fetchone()
+            if existing and existing["payload_hash"] != checksum:
+                raise HTTPException(409, "event ID collision")
+            c.execute("""INSERT INTO recsys_ab.trigger_requests(
+                experiment_id,project_id,prompt_name,prompt_version,prompt_checksum,config,prompt_snapshot,label_state)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING""",
+                      (eid, p["projectId"], p["name"], p["version"], immutable_checksum,
+                       Jsonb(config), Jsonb(prompt), Jsonb({"candidate": sorted(prompt.get("labels", []))})))
+            stored = c.execute("SELECT config,prompt_checksum FROM recsys_ab.trigger_requests WHERE experiment_id=%s", (eid,)).fetchone()
+            if (not stored or stored["config"] != config
+                    or stored.get("prompt_checksum") not in {None, immutable_checksum}):
+                raise HTTPException(409, "immutable prompt version collision")
+            c.execute("INSERT INTO recsys_ab.trigger_events(event_id,payload_hash,experiment_id,payload) VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+                      (event_id, checksum, eid, Jsonb(body)))
+        # Inbox is already durable. The recovery CronJob also creates missing Jobs.
+        try:
+            self.ensure_job(eid)
+        except httpx.HTTPError:
+            pass
+        return {"experiment_id": eid, "accepted": True}
+
+    def _catalog_and_candidate(self, state, config):
+        scope = config["scope"]
+        ref = config["llm_release_ref"]
+        if ref == state["champion"]["llm_version_id"]:
+            llm = deepcopy(state["champion"]["llm"])
+        else:
+            client = s3_client()
+            llm = json.loads(client.get_object(
+                Bucket=os.environ.get("AB_CATALOG_BUCKET", "recsys-llm-ab"),
+                Key=target(scope)["catalog_prefix"] + ref + ".json")["Body"].read())
+            if scope == "recommendation":
+                try:
+                    attestation = json.loads(client.get_object(
+                        Bucket=os.environ.get("AB_CATALOG_BUCKET", "recsys-llm-ab"),
+                        Key="recommendation/catalog-attestations/" + ref + ".json",
+                    )["Body"].read())
+                except (ClientError, KeyError) as exc:
+                    raise ValueError("catalog lacks model-onboarding attestation") from exc
+                if (attestation.get("llm_release_ref") != ref
+                        or attestation.get("scope") != "recommendation"
+                        or attestation.get("status") not in {"READY", "legacy-approved"}):
+                    raise ValueError("catalog onboarding attestation is not runnable")
+        if digest(llm) != ref:
+            raise ValueError("catalog object digest mismatch")
+        candidate = candidate_from_config(
+            state["champion"], config, llm, os.environ.get("AB_NAMESPACE", "kagent")
+        )
+        return llm, candidate
+
+    @staticmethod
+    def candidate_rejection(state, candidate):
+        if (
+            candidate.get("scope", "recommendation") != "recommendation"
+            and candidate["release_id"] in state.get("disabled", [])
+        ):
+            return "candidate release is quarantined"
+        return None
+
+    def persist_polled_prompt(self, prompt):
+        """Validate and durably snapshot an exact ready version once."""
+        project_id = os.environ["LANGFUSE_PROJECT_ID"]
+        if (prompt.get("name") != os.environ["AB_LANGFUSE_PROMPT"]
+                or prompt.get("prompt") != PROMPT_TEXT
+                or READY_LABEL not in prompt.get("labels", [])):
+            raise ValueError("ready prompt identity mismatch")
+        config = validate_config(prompt.get("config"))
+        if config["scope"] != "recommendation":
+            raise ValueError("poller only accepts Recommendation requests")
+        checksum = prompt_checksum(project_id, prompt)
+        eid = "rec-" + digest([project_id, prompt["name"], prompt["version"], checksum])[:32]
+        state, _ = StateStore(state_uri("recommendation")).read()
+        if state["phase"] not in {"IDLE", "COMPLETED", "ROLLED_BACK"}:
+            return None
+        if state.get("cleanup") and state["cleanup"].get("status") != "CLEANED":
+            return None
+        _, candidate = self._catalog_and_candidate(state, config)
+        rejection = self.candidate_rejection(state, candidate)
+        initial_status = "REJECTED" if rejection else "QUEUED"
+        with self.db.connect() as c, c.transaction():
+            c.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                      ("recommendation-prompt:" + prompt["name"] + ":" + str(prompt["version"]),))
+            existing_version = c.execute("""SELECT experiment_id,prompt_checksum FROM recsys_ab.trigger_requests
+                WHERE prompt_name=%s AND prompt_version=%s""",
+                (prompt["name"], prompt["version"])).fetchone()
+            if existing_version and existing_version.get("prompt_checksum") not in {None, checksum}:
+                raise ValueError("immutable prompt version checksum collision")
+            c.execute("""INSERT INTO recsys_ab.trigger_requests(
+                experiment_id,project_id,prompt_name,prompt_version,prompt_checksum,config,prompt_snapshot,
+                status,reason,candidate,config_diff,label_state,label_sync_status)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'DISCOVERED') ON CONFLICT DO NOTHING""",
+                (eid, project_id, prompt["name"], prompt["version"], checksum,
+                 Jsonb(config), Jsonb(canonical_prompt_snapshot(project_id, prompt)),
+                 initial_status, rejection, Jsonb(candidate),
+                 Jsonb(release_diff(state["champion"], candidate)),
+                 Jsonb({"candidate_version": prompt["version"],
+                        "candidate": sorted(prompt.get("labels", []))})))
+            stored = c.execute("SELECT * FROM recsys_ab.trigger_requests WHERE experiment_id=%s", (eid,)).fetchone()
+            if (not stored or stored["project_id"] != project_id or stored["prompt_checksum"] != checksum
+                    or stored["config"] != config):
+                raise ValueError("immutable polled prompt collision")
+        return eid
