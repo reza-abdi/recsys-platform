@@ -355,3 +355,182 @@ def _stream_recommendation_result(
             }:
                 return payload
     raise HTTPException(504, "task stream ended without terminal evidence; do not replay")
+
+
+def create_app(mode=None, database=None, store=None, client=None):
+    mode = mode or os.environ.get("MODE", "router")
+    scope = os.environ.get("AB_SCOPE", "recommendation")
+    if scope not in {"recommendation", "workflow"}:
+        raise ValueError("unsupported router scope")
+    token = os.environ.get("AB_INTERNAL_TOKEN", "")
+    if not token:
+        raise ValueError("AB_INTERNAL_TOKEN is required")
+    test_session_ttl = int(os.environ.get("AB_TEST_SESSION_TTL_SECONDS", "86400"))
+    if not 3600 <= test_session_ttl <= 604800:
+        raise ValueError("AB_TEST_SESSION_TTL_SECONDS must be between 1 hour and 7 days")
+    if mode == "edge" and (
+        len(os.environ.get("AB_CASE_TICKET_KEY", "").encode("utf-8")) < 32
+        or not os.environ.get("AB_EDGE_REVISION")
+        or not os.environ.get("AB_ROUTER_URL")
+    ):
+        raise ValueError("edge ticket key, revision and private router URL are required")
+    db = database or (
+        Database(os.environ["AB_DATABASE_URL"]) if mode in {"router", "edge"} else None
+    )
+    state_store = store or (
+        StateStore(os.environ["AB_STATE_URI"]) if mode != "facade" else None
+    )
+    http = client or httpx.Client(
+        timeout=600, follow_redirects=False, transport=httpx.HTTPTransport(retries=0)
+    )
+
+    @asynccontextmanager
+    async def lifespan(app):
+        configure()
+
+        async def heartbeat():
+            emitted = set()
+            projected_archives = set()
+            experiment = None
+
+            def beat():
+                with db.connect() as c:
+                    c.execute(
+                        "INSERT INTO recsys_ab.heartbeat(instance) VALUES (%s) ON CONFLICT(instance) DO UPDATE SET seen_at=now()",
+                        (os.environ.get("HOSTNAME", "router"),),
+                    )
+
+            while True:
+                # Router liveness is independent from optional dashboard/log
+                # projection. A newly catalogued immutable release must not
+                # make production telemetry stale merely because an older
+                # projection path cannot render its diff yet.
+                try:
+                    await asyncio.to_thread(beat)
+                except Exception:
+                    pass  # Missing heartbeat is a HOLD; never fabricate it.
+                try:
+                    snapshot, _ = await asyncio.to_thread(state_store.read)
+                    from .workflow_events import snapshot_events
+                    if experiment != snapshot.get("experiment_id"):
+                        emitted.clear()
+                        experiment = snapshot.get("experiment_id")
+                    for event in snapshot_events(snapshot):
+                        if event["event_id"] not in emitted:
+                            print(json.dumps(event), flush=True)
+                            emitted.add(event["event_id"])
+                    # Re-project durable historical evidence after a restart,
+                    # without running monitor gates or reading LLM/tool APIs.
+                    pending = [r for r in snapshot.get("history", []) if r["checksum"] not in projected_archives]
+                    for reference in pending[:5]:
+                        archived = await asyncio.to_thread(state_store.read_archive, reference)
+                        for event in snapshot_events(archived):
+                            print(json.dumps(event), flush=True)
+                        projected_archives.add(reference["checksum"])
+
+                except Exception:
+                    # Projection is evidence-only and at-least-once. It cannot
+                    # suppress the independently recorded router heartbeat.
+                    pass
+                await asyncio.sleep(30)
+
+        if db:
+            db.migrate()
+        # Only the private router projects state/history and represents serving
+        # telemetry freshness. The public edge has DB health but must not
+        # masquerade as a healthy model-routing data plane.
+        task = asyncio.create_task(heartbeat()) if mode == "router" else None
+        yield
+        if task:
+            task.cancel()
+        http.close()
+
+    app = FastAPI(lifespan=lifespan)
+
+    def auth(request):
+        if not hmac.compare_digest(
+            request.headers.get("authorization", ""), "Bearer " + token
+        ):
+            raise HTTPException(403, "internal caller required")
+
+    def headers(request):
+        # Never trust client-supplied routing/source/experiment headers.
+        return {
+            **{
+                k: request.headers[k]
+                for k in ("traceparent", "tracestate", "x-user-id", "a2a-version")
+                if k in request.headers
+            },
+            "authorization": "Bearer " + token,
+            "content-type": "application/json",
+        }
+
+    def edge_headers(request, traffic_kind="synthetic_case"):
+        # NGINX authenticates the caller. Never forward Basic Auth, user/source,
+        # release, variant or experiment headers supplied at the public edge.
+        result = {
+            **{
+                key: request.headers[key]
+                for key in ("traceparent", "tracestate", "a2a-version")
+                if key in request.headers
+            },
+            "authorization": "Bearer " + token,
+            "content-type": "application/json",
+            "x-recsys-source": (
+                "live_test" if traffic_kind == "live_test" else "synthetic"
+            ),
+            "x-user-id": (
+                "llm-ab-live" if traffic_kind == "live_test" else "llm-ab-suite"
+            ),
+            "a2a-version": request.headers.get("a2a-version", "1.0"),
+        }
+        if traffic_kind == "live_test":
+            result["x-recsys-test-token"] = os.environ["AB_LIVE_TEST_TOKEN"]
+        return result
+
+    @app.get("/healthz")
+    def health():
+        if state_store:
+            state_store.read()
+        if db:
+            with db.connect() as c:
+                c.execute("SELECT 1")
+        return {"ok": True}
+
+    @app.get("/.well-known/agent-card.json")
+    def card():
+        return {
+            "name": "Workflow release router" if os.environ.get("AB_SCOPE") == "workflow" else "Recommendation release router",
+            "description": "Stable, immutable release A2A entrypoint",
+            "url": os.environ.get(
+                "PUBLIC_A2A_URL",
+                "http://recsys-ab-router.kagent.svc.cluster.local/",
+            ),
+            "version": "1.0.0",
+            "protocolVersion": "1.0",
+            "capabilities": {"streaming": False},
+            "defaultInputModes": ["text/plain"],
+            "defaultOutputModes": ["text/plain"],
+            "skills": [
+                {
+                    "id": "personalized-recommendations",
+                    "name": "Recommendations",
+                    "description": "Present model-ranked recommendations",
+                    "tags": ["recommendation"],
+                }
+            ],
+        }
+
+    @app.get("/allocate")
+    @app.get("/identity")
+    def allocate(request: Request):
+        auth(request)
+        if mode != "adapter":
+            raise HTTPException(404)
+        state, _ = state_store.read()
+        rid = os.environ["RELEASE_ID"]
+        if rid in state.get("disabled", []):
+            raise HTTPException(409, "release quarantined; start a new session")
+        return {"release_id": rid}
+
+    return app
