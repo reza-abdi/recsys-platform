@@ -561,4 +561,116 @@ def create_app(mode=None, database=None, store=None, client=None):
                 "gate_windows": snapshot.get("gate_windows", []), "events": snapshot_events(snapshot),
                 "post_promotion_monitoring": False}
 
+
+    @app.post("/a2a/recommendation-ab/v1")
+    async def public_recommendation_ab(request: Request):
+        if mode != "edge" or scope != "recommendation":
+            raise HTTPException(404)
+        if int(request.headers.get("content-length", "0") or 0) > 262_144:
+            raise HTTPException(413, "request is too large")
+        from .tickets import bind_body, verify
+
+        secret = os.environ.get("AB_CASE_TICKET_KEY", "")
+        if len(secret.encode("utf-8")) < 32:
+            raise HTTPException(503, "ticket verifier is unavailable")
+        try:
+            claims = verify(request.headers.get("x-recsys-ab-ticket", ""), secret)
+        except ValueError:
+            raise HTTPException(403, "invalid A/B ticket")
+        traffic_kind = claims.get("traffic_kind", "synthetic_case")
+        try:
+            # Claim before body/state validation: a valid ticket presented with
+            # a wrong request is consumed and cannot later be retried correctly.
+            if traffic_kind == "live_test":
+                db.claim_live_ticket(claims)
+            else:
+                db.claim_external_ticket(claims)
+        except ValueError:
+            raise HTTPException(409, "ticket already used or not dispatchable")
+        try:
+            body = await request.json()
+            prompt = bind_body(claims, body)
+            snapshot, _ = state_store.read()
+            if traffic_kind == "live_test":
+                if (
+                    snapshot.get("phase") != claims.get("phase")
+                    or snapshot.get("phase") not in {"CANARY", "AB", "VERIFY"}
+                    or snapshot.get("experiment_id") != claims["experiment_id"]
+                ):
+                    raise ValueError("live ticket does not match active phase")
+            else:
+                fixture = next(
+                    (row for row in snapshot.get("fixtures", []) if row["id"] == claims["case_id"]),
+                    None,
+                )
+                if (
+                    snapshot.get("phase") != "AB"
+                    or snapshot.get("experiment_id") != claims["experiment_id"]
+                    or snapshot.get("fixture_checksum") != claims["fixture_checksum"]
+                    or not fixture
+                    or fixture.get("prompt") != prompt
+                ):
+                    raise ValueError("ticket does not match active immutable suite")
+        except Exception as exc:
+            if traffic_kind == "live_test":
+                db.finish_live_ticket(
+                    claims["request_id"], "REJECTED", http_status=403,
+                    last_error=type(exc).__name__,
+                )
+            else:
+                db.finish_external_ticket(
+                    claims["experiment_id"], claims["case_id"], "REJECTED",
+                    http_status=403, last_error=type(exc).__name__,
+                )
+            raise HTTPException(403, "ticket does not match the active suite")
+
+        def forward_public_case():
+            revision = os.environ.get("AB_EDGE_REVISION", "")
+            if not revision:
+                raise RuntimeError("edge revision is not configured")
+            started = time.monotonic()
+            try:
+                response = http.post(
+                    os.environ["AB_ROUTER_URL"].rstrip("/") + "/",
+                    json=body,
+                    headers=edge_headers(request, traffic_kind),
+                )
+                payload = response.json()
+                if response.status_code != 200 or payload.get("id") != claims["request_id"]:
+                    raise RuntimeError("private router response is ambiguous")
+            except Exception as exc:
+                if traffic_kind == "live_test":
+                    db.finish_live_ticket(
+                        claims["request_id"], "AMBIGUOUS",
+                        http_status=getattr(locals().get("response"), "status_code", None),
+                        last_error=type(exc).__name__,
+                    )
+                else:
+                    db.finish_external_ticket(
+                        claims["experiment_id"], claims["case_id"], "AMBIGUOUS",
+                        http_status=getattr(locals().get("response"), "status_code", None),
+                        last_error=type(exc).__name__,
+                    )
+                raise HTTPException(502, "private execution result is ambiguous")
+            if traffic_kind == "live_test":
+                db.finish_live_ticket(
+                    claims["request_id"], "COMPLETED", http_status=200,
+                    response_checksum=digest(payload),
+                    latency_seconds=time.monotonic() - started,
+                    edge_revision=revision,
+                )
+            else:
+                db.finish_external_ticket(
+                    claims["experiment_id"], claims["case_id"], "COMPLETED",
+                    http_status=200, response_checksum=digest(payload),
+                    latency_seconds=time.monotonic() - started,
+                    edge_revision=revision,
+                )
+            return JSONResponse(
+                payload, status_code=200,
+                headers={"X-RecSys-AB-Edge-Revision": revision},
+            )
+
+        return await asyncio.to_thread(forward_public_case)
+
     return app
