@@ -31,6 +31,7 @@ export function App() {
   const [recommendations, setRecommendations] =
     useState<RecommendationResponse | null>(null)
   const currentSession = useMemo(sessionId, [])
+
   const users = useQuery({ queryKey: ['users'], queryFn: api.users })
   const products = useQuery({
     queryKey: ['products'],
