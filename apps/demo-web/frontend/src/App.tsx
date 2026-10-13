@@ -180,6 +180,54 @@ export function App() {
         <p className={styles.error}>{recommendationMutation.error.message}</p>
       )}
 
+      {recommendations && (
+        <section
+          className={styles.recommendations}
+          aria-labelledby="recommendation-title"
+        >
+          <div className={styles.sectionHeading}>
+            <div>
+              <p className={styles.eyebrow}>
+                MODEL {recommendations.model_version}
+              </p>
+              <h2 id="recommendation-title">Recommended now</h2>
+            </div>
+            <span>{recommendations.ab_variant ?? 'default'} route</span>
+          </div>
+          <div className={styles.horizontalCards}>
+            {recommendations.items.map((item, index) => (
+              <article
+                className={styles.recommendationCard}
+                key={item.impression_id}
+              >
+                <span className={styles.rank}>#{index + 1}</span>
+                <h3>
+                  {item.product?.product_name ?? `Product ${item.item_id}`}
+                </h3>
+                <p>{item.product?.brand_name ?? 'Live candidate'}</p>
+                <strong>
+                  {item.product
+                    ? `$${item.product.current_price.toFixed(2)}`
+                    : item.score.toFixed(4)}
+                </strong>
+                {item.product && (
+                  <button
+                    onClick={() =>
+                      void sendAction(item.product!, 'view', {
+                        requestId: recommendations.request_id,
+                        impressionId: item.impression_id,
+                      })
+                    }
+                  >
+                    View recommendation
+                  </button>
+                )}
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className={styles.contentGrid}>
         <section aria-labelledby="catalog-title">
           <div className={styles.sectionHeading}>
