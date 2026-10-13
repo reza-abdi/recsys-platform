@@ -4,6 +4,12 @@ import { useMemo, useState } from 'react'
 import { api, type Action, type Product } from './api/client'
 import styles from './App.module.css'
 
+type TimelineEvent = {
+  id: string
+  label: string
+  status: 'accepted' | 'feature_store_updated' | 'waiting' | 'failed'
+}
+
 function sessionId(): string {
   const key = 'recsys-demo-session-id'
   const existing = window.localStorage.getItem(key)
@@ -16,9 +22,7 @@ function sessionId(): string {
 export function App() {
   const [selectedUser, setSelectedUser] = useState<number | null>(null)
   const [cart, setCart] = useState<Record<number, number>>({})
-  const [, setTimeline] = useState<
-    Array<{ id: string; label: string; status: 'accepted' | 'waiting' | 'failed' }>
-  >([])
+  const [timeline, setTimeline] = useState<TimelineEvent[]>([])
   const currentSession = useMemo(sessionId, [])
   const users = useQuery({ queryKey: ['users'], queryFn: api.users })
   const products = useQuery({
@@ -26,10 +30,7 @@ export function App() {
     queryFn: () => api.products(0),
   })
 
-  const updateTimeline = (
-    id: string,
-    status: 'accepted' | 'waiting' | 'failed',
-  ) => {
+  const updateTimeline = (id: string, status: TimelineEvent['status']) => {
     setTimeline((current) =>
       current.map((event) => (event.id === id ? { ...event, status } : event)),
     )
@@ -135,7 +136,8 @@ export function App() {
         </div>
       </header>
 
-      <section aria-labelledby="catalog-title">
+      <div className={styles.contentGrid}>
+        <section aria-labelledby="catalog-title">
         <div className={styles.sectionHeading}>
           <div>
             <p className={styles.eyebrow}>LIVE POSTGRES CATALOG</p>
@@ -177,7 +179,29 @@ export function App() {
             </article>
           ))}
         </div>
-      </section>
+        </section>
+
+        <aside className={styles.timeline} aria-labelledby="timeline-title">
+          <p className={styles.eyebrow}>POSTGRES → CDC → FLINK → FEAST</p>
+          <h2 id="timeline-title">Event stream</h2>
+          {timeline.length === 0 && (
+            <p>Interact with a product to watch the stream.</p>
+          )}
+          <ol>
+            {timeline.map((event) => (
+              <li key={event.id}>
+                <span
+                  className={`${styles.statusDot} ${styles[event.status]}`}
+                />
+                <div>
+                  <strong>{event.label}</strong>
+                  <small>{event.status.replaceAll('_', ' ')}</small>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </aside>
+      </div>
     </main>
   )
 }

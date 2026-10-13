@@ -79,10 +79,17 @@
   margin: 34px 0 18px;
 }
 
-.sectionHeading h2 {
+.sectionHeading h2,
+.timeline h2 {
   margin: 5px 0 0;
   font-size: clamp(1.7rem, 3vw, 2.7rem);
   letter-spacing: -0.04em;
+}
+
+.contentGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 310px;
+  gap: 36px;
 }
 
 .productGrid {
@@ -161,6 +168,58 @@ select:focus-visible {
   color: #7d1616;
 }
 
+.timeline {
+  position: sticky;
+  top: 20px;
+  align-self: start;
+  margin-top: 34px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.timeline ol {
+  display: grid;
+  gap: 18px;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline li {
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  gap: 11px;
+}
+
+.timeline small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.statusDot {
+  width: 10px;
+  height: 10px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #aaa;
+}
+
+.accepted,
+.waiting {
+  background: var(--accent);
+}
+
+.feature_store_updated {
+  background: #1d9b68;
+}
+
+.failed {
+  background: #c84343;
+}
+
 @media (max-width: 900px) {
   .header {
     align-items: flex-start;
@@ -169,5 +228,13 @@ select:focus-visible {
 
   .controls {
     justify-content: flex-start;
+  }
+
+  .contentGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline {
+    position: static;
   }
 }
