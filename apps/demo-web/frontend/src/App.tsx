@@ -7,6 +7,10 @@ import styles from './App.module.css'
 export function App() {
   const [selectedUser, setSelectedUser] = useState<number | null>(null)
   const users = useQuery({ queryKey: ['users'], queryFn: api.users })
+  const products = useQuery({
+    queryKey: ['products'],
+    queryFn: () => api.products(0),
+  })
 
   return (
     <main className={styles.shell}>
@@ -38,6 +42,36 @@ export function App() {
           </label>
         </div>
       </header>
+
+      <section aria-labelledby="catalog-title">
+        <div className={styles.sectionHeading}>
+          <div>
+            <p className={styles.eyebrow}>LIVE POSTGRES CATALOG</p>
+            <h2 id="catalog-title">Popular products</h2>
+          </div>
+          <span>{products.data?.total ?? 0} active</span>
+        </div>
+        {products.isLoading && <p>Loading live catalog…</p>}
+        {products.error && (
+          <p className={styles.error}>{products.error.message}</p>
+        )}
+        <div className={styles.productGrid}>
+          {products.data?.items.map((product) => (
+            <article className={styles.productCard} key={product.product_id}>
+              <div className={styles.productVisual} aria-hidden="true">
+                <span>
+                  {product.category_code ?? `CAT ${product.category_id}`}
+                </span>
+              </div>
+              <div className={styles.productBody}>
+                <p>{product.brand_name ?? `Brand ${product.brand_id}`}</p>
+                <h3>{product.product_name}</h3>
+                <strong>${product.current_price.toFixed(2)}</strong>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
     </main>
   )
 }
