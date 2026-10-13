@@ -15,6 +15,7 @@ function sessionId(): string {
 
 export function App() {
   const [selectedUser, setSelectedUser] = useState<number | null>(null)
+  const [cart, setCart] = useState<Record<number, number>>({})
   const [, setTimeline] = useState<
     Array<{ id: string; label: string; status: 'accepted' | 'waiting' | 'failed' }>
   >([])
@@ -68,7 +69,7 @@ export function App() {
           session_id: currentSession,
           request_id: correlation?.requestId,
           impression_id: correlation?.impressionId,
-          quantity: 1,
+          quantity: action === 'purchase' ? (cart[product.product_id] ?? 1) : 1,
         },
         `web-${temporaryId}`,
       )
@@ -79,10 +80,28 @@ export function App() {
             : event,
         ),
       )
+      if (action === 'cart') {
+        setCart((current) => ({
+          ...current,
+          [product.product_id]: (current[product.product_id] ?? 0) + 1,
+        }))
+      }
+      if (action === 'purchase') {
+        setCart((current) => {
+          const next = { ...current }
+          delete next[product.product_id]
+          return next
+        })
+      }
     } catch {
       updateTimeline(temporaryId, 'failed')
     }
   }
+
+  const cartCount = Object.values(cart).reduce(
+    (sum, quantity) => sum + quantity,
+    0,
+  )
 
   return (
     <main className={styles.shell}>
@@ -112,6 +131,7 @@ export function App() {
               ))}
             </select>
           </label>
+          <div className={styles.cart}>Cart {cartCount}</div>
         </div>
       </header>
 
@@ -142,6 +162,15 @@ export function App() {
                 <div className={styles.actions}>
                   <button onClick={() => void sendAction(product, 'view')}>
                     View
+                  </button>
+                  <button onClick={() => void sendAction(product, 'cart')}>
+                    Add to cart
+                  </button>
+                  <button
+                    className={styles.purchase}
+                    onClick={() => void sendAction(product, 'purchase')}
+                  >
+                    Purchase
                   </button>
                 </div>
               </div>

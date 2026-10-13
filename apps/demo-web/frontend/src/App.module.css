@@ -59,6 +59,18 @@
   color: var(--ink);
 }
 
+.purchase {
+  background: var(--ink) !important;
+  color: white !important;
+}
+
+.cart {
+  padding: 14px 18px;
+  border: 1px solid var(--ink);
+  background: var(--accent);
+  font-weight: 800;
+}
+
 .sectionHeading {
   display: flex;
   align-items: center;
