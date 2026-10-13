@@ -1,11 +1,21 @@
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { api } from './api/client'
 import styles from './App.module.css'
 
+function sessionId(): string {
+  const key = 'recsys-demo-session-id'
+  const existing = window.localStorage.getItem(key)
+  if (existing) return existing
+  const created = `web-session-${crypto.randomUUID()}`
+  window.localStorage.setItem(key, created)
+  return created
+}
+
 export function App() {
   const [selectedUser, setSelectedUser] = useState<number | null>(null)
+  const currentSession = useMemo(sessionId, [])
   const users = useQuery({ queryKey: ['users'], queryFn: api.users })
   const products = useQuery({
     queryKey: ['products'],
@@ -13,7 +23,7 @@ export function App() {
   })
 
   return (
-    <main className={styles.shell}>
+    <main className={styles.shell} data-session-id={currentSession}>
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>LIVE PERSONALIZATION LAB</p>
