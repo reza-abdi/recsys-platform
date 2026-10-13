@@ -1,0 +1,183 @@
+# Keep the installation intentionally small while retaining the real sandbox
+# WorkerPool used by the repository-owned SandboxAgent.
+kmcp:
+  enabled: false
+
+# Quota-safe requests for the coursework GKE cluster. Limits retain burst room.
+database:
+  postgres:
+    bundled:
+      # Explicitly retain the chart's default PostgreSQL backend. This shared
+      # database supports the three controller replicas, but the single bundled
+      # PostgreSQL Pod is not itself a highly available database.
+      enabled: true
+      resources:
+        requests:
+          cpu: 25m
+          memory: 128Mi
+        limits:
+          cpu: 250m
+          memory: 256Mi
+
+controller:
+  # The constrained production cluster runs one upstream controller. Increase
+  # this only after the scheduler preflight proves surge and steady-state room.
+  replicas: 1
+  podAnnotations:
+    recsys.ai/upstream-build: 0.10.0-rc1
+  nodeSelector:
+    cloud.google.com/gke-nodepool: recsys-mlops-cpu
+  pdb:
+    enabled: true
+    maxUnavailable: 1
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: kagent
+          app.kubernetes.io/instance: kagent
+          app.kubernetes.io/component: controller
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  substrate:
+    enabled: true
+    ateApiEndpoint: dns:///api.ate-system.svc:443
+    ateApiInsecure: true
+    atenetRouterURL: http://atenet-router.ate-system.svc:80
+    defaultWorkerPool:
+      name: recsys-context-sandbox-pool
+
+substrateWorkerPool:
+  create: true
+  name: recsys-context-sandbox-pool
+  # Keep the scheduler label used by the upstream Substrate integration.
+  labels:
+    ate.dev/worker-pool: recsys-context-sandbox-pool
+  # Terraform/kagent owns this required baseline. The application-owned KEDA
+  # ScaledObject reconciles the WorkerPool /scale subresource between 1 and 3.
+  replicas: 1
+  ateomImage: ghcr.io/kagent-dev/substrate/ateom-gvisor:v0.0.9
+  sandboxClass: gvisor
+  # Reserve CPU shares for snapshot compression/resume while retaining burst
+  # capacity. Pin warm workers to the production CPU node pool so placement is
+  # stable and does not contend with the tainted ML-system node.
+  template:
+    nodeSelector:
+      cloud.google.com/gke-nodepool: recsys-mlops-cpu
+    resources:
+      requests:
+        cpu: 250m
+        memory: 1Gi
+      limits:
+        memory: 2Gi
+
+ui:
+  nodeSelector:
+    recsys.ai/pool: ml-system
+  tolerations:
+    - key: recsys.ai/workload
+      operator: Equal
+      value: ml-system
+      effect: NoSchedule
+  resources:
+    requests:
+      cpu: 25m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+kagent-tools:
+  enabled: false
+  resources:
+    requests:
+      cpu: 25m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+providers:
+  default: openAI
+  openAI:
+    provider: OpenAI
+    model: qwen3.5-0.8b
+    apiKeySecretRef: kagent-agent-gateway
+    apiKeySecretKey: AGENT_GATEWAY_API_KEY
+    defaultHeaders:
+      X-Gateway-Base-Model-Name: llm-d-optimized-baseline
+    config:
+      baseUrl: http://llm-d-inference-gateway.llm-inference.svc.cluster.local/v1
+      # Keep the small CPU model deterministic and bound each tool turn. A
+      # larger cap allowed repeated tool calls to hold a Sandbox worker long
+      # enough for the fixed kagent Agent-tool timeout to expire.
+      # llama.cpp disables hidden reasoning for this CPU tool-use route, so the
+      # complete budget is available to the tool call or concise final answer.
+      maxTokens: 384
+      temperature: "0"
+      seed: 42
+
+# Native kagent/Google ADK telemetry is sent to the repository-owned Collector.
+# Content is inspected in memory for safety counters and then discarded/redacted
+# before Loki or Tempo persistence.
+otel:
+  tracing:
+    enabled: true
+    exporter:
+      otlp:
+        endpoint: http://recsys-otel-collector.observability.svc.cluster.local:4317
+        insecure: true
+        protocol: grpc
+        timeout: 15000
+  logging:
+    enabled: true
+    exporter:
+      otlp:
+        endpoint: http://recsys-otel-collector.observability.svc.cluster.local:4317
+        insecure: true
+        timeout: 15000
+
+# Agents are deployed by the repository-owned recsys-kagent-agent chart. The
+# upstream demo Agents and MCP servers are disabled to avoid unnecessary GKE
+# resources and oversized prompts for the 16,384-token coursework runtime.
+k8s-agent:
+  enabled: false
+
+kgateway-agent:
+  enabled: false
+
+istio-agent:
+  enabled: false
+
+promql-agent:
+  enabled: false
+
+observability-agent:
+  enabled: false
+
+argo-rollouts-agent:
+  enabled: false
+
+helm-agent:
+  enabled: false
+
+cilium-policy-agent:
+  enabled: false
+
+cilium-manager-agent:
+  enabled: false
+
+cilium-debug-agent:
+  enabled: false
+
+grafana-mcp:
+  enabled: false
+
+querydoc:
+  enabled: false
