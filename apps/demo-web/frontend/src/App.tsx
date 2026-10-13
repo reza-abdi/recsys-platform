@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 
-import { api } from './api/client'
+import { api, type Action, type Product } from './api/client'
 import styles from './App.module.css'
 
 function sessionId(): string {
@@ -15,6 +15,9 @@ function sessionId(): string {
 
 export function App() {
   const [selectedUser, setSelectedUser] = useState<number | null>(null)
+  const [, setTimeline] = useState<
+    Array<{ id: string; label: string; status: 'accepted' | 'waiting' | 'failed' }>
+  >([])
   const currentSession = useMemo(sessionId, [])
   const users = useQuery({ queryKey: ['users'], queryFn: api.users })
   const products = useQuery({
@@ -22,8 +25,67 @@ export function App() {
     queryFn: () => api.products(0),
   })
 
+  const updateTimeline = (
+    id: string,
+    status: 'accepted' | 'waiting' | 'failed',
+  ) => {
+    setTimeline((current) =>
+      current.map((event) => (event.id === id ? { ...event, status } : event)),
+    )
+  }
+
+  const sendAction = async (
+    product: Product,
+    action: Action,
+    correlation?: { requestId: string; impressionId: string },
+  ) => {
+    if (selectedUser === null) {
+      setTimeline((current) => [
+        {
+          id: crypto.randomUUID(),
+          label: 'Select a user before sending an event',
+          status: 'failed',
+        },
+        ...current,
+      ])
+      return
+    }
+    const temporaryId = crypto.randomUUID()
+    setTimeline((current) => [
+      {
+        id: temporaryId,
+        label: `${action.toUpperCase()} · ${product.product_name}`,
+        status: 'waiting',
+      },
+      ...current,
+    ])
+    try {
+      const accepted = await api.event(
+        {
+          user_id: selectedUser,
+          product_id: product.product_id,
+          action,
+          session_id: currentSession,
+          request_id: correlation?.requestId,
+          impression_id: correlation?.impressionId,
+          quantity: 1,
+        },
+        `web-${temporaryId}`,
+      )
+      setTimeline((current) =>
+        current.map((event) =>
+          event.id === temporaryId
+            ? { ...event, id: accepted.event_id, status: 'accepted' }
+            : event,
+        ),
+      )
+    } catch {
+      updateTimeline(temporaryId, 'failed')
+    }
+  }
+
   return (
-    <main className={styles.shell} data-session-id={currentSession}>
+    <main className={styles.shell}>
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>LIVE PERSONALIZATION LAB</p>
@@ -77,6 +139,11 @@ export function App() {
                 <p>{product.brand_name ?? `Brand ${product.brand_id}`}</p>
                 <h3>{product.product_name}</h3>
                 <strong>${product.current_price.toFixed(2)}</strong>
+                <div className={styles.actions}>
+                  <button onClick={() => void sendAction(product, 'view')}>
+                    View
+                  </button>
+                </div>
               </div>
             </article>
           ))}

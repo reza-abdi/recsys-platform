@@ -119,6 +119,30 @@
   margin: 8px 0 14px;
 }
 
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 18px;
+}
+
+.actions button {
+  cursor: pointer;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  padding: 9px 11px;
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+}
+
+.actions button:focus-visible,
+select:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .error {
   padding: 12px;
   background: #ffdada;
