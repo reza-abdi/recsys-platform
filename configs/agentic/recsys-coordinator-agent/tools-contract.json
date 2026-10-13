@@ -1,0 +1,15 @@
+{
+  "agents": [
+    {
+      "apiGroup": "kagent.dev",
+      "kind": "SandboxAgent",
+      "name": "recsys-context-agent-sandbox"
+    },
+    {
+      "apiGroup": "kagent.dev",
+      "kind": "SandboxAgent",
+      "name": "recsys-recommendation-agent-sandbox"
+    }
+  ],
+  "mcpServers": []
+}
