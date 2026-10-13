@@ -59,11 +59,13 @@
   color: var(--ink);
 }
 
+.recommendButton,
 .purchase {
   background: var(--ink) !important;
   color: white !important;
 }
 
+.recommendButton,
 .cart {
   padding: 14px 18px;
   border: 1px solid var(--ink);
@@ -146,7 +148,8 @@
   margin-top: 18px;
 }
 
-.actions button {
+.actions button,
+.recommendButton {
   cursor: pointer;
   border: 1px solid currentColor;
   border-radius: 2px;
@@ -157,6 +160,7 @@
 }
 
 .actions button:focus-visible,
+.recommendButton:focus-visible,
 select:focus-visible {
   outline: 3px solid var(--accent);
   outline-offset: 2px;

@@ -1,7 +1,12 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 
-import { api, type Action, type Product } from './api/client'
+import {
+  api,
+  type Action,
+  type Product,
+  type RecommendationResponse,
+} from './api/client'
 import styles from './App.module.css'
 
 type TimelineEvent = {
@@ -23,11 +28,21 @@ export function App() {
   const [selectedUser, setSelectedUser] = useState<number | null>(null)
   const [cart, setCart] = useState<Record<number, number>>({})
   const [timeline, setTimeline] = useState<TimelineEvent[]>([])
+  const [recommendations, setRecommendations] =
+    useState<RecommendationResponse | null>(null)
   const currentSession = useMemo(sessionId, [])
   const users = useQuery({ queryKey: ['users'], queryFn: api.users })
   const products = useQuery({
     queryKey: ['products'],
     queryFn: () => api.products(0),
+  })
+
+  const recommendationMutation = useMutation({
+    mutationFn: () => {
+      if (selectedUser === null) throw new Error('Select a user first')
+      return api.recommendations(selectedUser, currentSession)
+    },
+    onSuccess: setRecommendations,
   })
 
   const updateTimeline = (id: string, status: TimelineEvent['status']) => {
@@ -148,9 +163,22 @@ export function App() {
               ))}
             </select>
           </label>
+          <button
+            className={styles.recommendButton}
+            disabled={selectedUser === null || recommendationMutation.isPending}
+            onClick={() => recommendationMutation.mutate()}
+          >
+            {recommendationMutation.isPending
+              ? 'Ranking…'
+              : 'Get recommendations'}
+          </button>
           <div className={styles.cart}>Cart {cartCount}</div>
         </div>
       </header>
+
+      {recommendationMutation.error && (
+        <p className={styles.error}>{recommendationMutation.error.message}</p>
+      )}
 
       <div className={styles.contentGrid}>
         <section aria-labelledby="catalog-title">
