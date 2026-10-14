@@ -1,0 +1,80 @@
+{{- $contexts := include "recsys-feature-rag-mcp.revisionContexts" . | fromJsonArray -}}
+{{ range $context := $contexts }}
+{{ $allowedHosts := include "recsys-feature-rag-mcp.allowedHosts" (dict "root" $ "name" $context.name) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $context.name }}
+  namespace: {{ $.Values.namespace }}
+{{- if $.Values.releaseMetadata.registryRef }}
+  annotations:
+    recsys.dev/agent-registry-ref: {{ $.Values.releaseMetadata.registryRef | quote }}
+    recsys.dev/agent-release-version: {{ $.Values.releaseMetadata.version | quote }}
+    recsys.dev/contract-sha256: {{ $.Values.releaseMetadata.contractSha256 | quote }}
+{{- end }}
+  labels:
+    {{- include "recsys-feature-rag-mcp.revisionLabels" $context | nindent 4 }}
+spec:
+{{- if not $.Values.autoscaling.enabled }}
+  replicas: {{ $.Values.replicas }}
+{{ end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ $.Values.rollout.maxUnavailable }}
+      maxSurge: {{ $.Values.rollout.maxSurge }}
+  minReadySeconds: {{ $.Values.rollout.minReadySeconds }}
+  progressDeadlineSeconds: {{ $.Values.rollout.progressDeadlineSeconds }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $context.name }}
+  template:
+    metadata:
+      labels:
+        {{- include "recsys-feature-rag-mcp.revisionLabels" $context | nindent 8 }}
+        sidecar.istio.io/inject: "true"
+      annotations:
+{{- if $.Values.releaseMetadata.registryRef }}
+        recsys.dev/agent-registry-ref: {{ $.Values.releaseMetadata.registryRef | quote }}
+        recsys.dev/agent-release-version: {{ $.Values.releaseMetadata.version | quote }}
+        recsys.dev/contract-sha256: {{ $.Values.releaseMetadata.contractSha256 | quote }}
+{{- end }}
+        checksum/config: {{ dict "config" $.Values.config "image" $.Values.image "allowedHosts" $allowedHosts | toJson | sha256sum }}
+        sidecar.istio.io/inject: "true"
+        sidecar.istio.io/proxyCPU: "20m"
+        sidecar.istio.io/proxyMemory: "64Mi"
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: {{ $.Values.service.targetPort | quote }}
+    spec:
+      serviceAccountName: {{ $context.name }}
+      nodeSelector: {{ toYaml $.Values.nodeSelector | nindent 8 }}
+      tolerations: {{ toYaml $.Values.tolerations | nindent 8 }}
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ $context.name }}
+      containers:
+        - name: mcp
+          image: {{ $.Values.image }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          envFrom:
+            - configMapRef: {name: {{ $context.name }}}
+            - secretRef: {name: {{ $context.secretName }}}
+          ports: [{name: http, containerPort: {{ $.Values.service.targetPort }}}]
+          startupProbe: {httpGet: {path: /healthz, port: http}, failureThreshold: 30, periodSeconds: 2}
+          readinessProbe: {httpGet: {path: /ready, port: http}, periodSeconds: 5, failureThreshold: 2}
+          livenessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 20, failureThreshold: 3}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          resources: {{ toYaml $.Values.resources | nindent 12 }}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes: [{name: tmp, emptyDir: {}}]
+{{- end }}
