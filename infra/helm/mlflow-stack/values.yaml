@@ -1,0 +1,49 @@
+namespace:
+  create: true
+  name: experiment-tracking
+
+storageClassName: ""
+
+nodeSelector: {}
+tolerations: []
+
+minio:
+  image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+  rootUser: minio
+  rootPassword: ""
+  bucket: mlflow-artifacts
+  modelStoreBucket: recsys-model-store
+  storage: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+  service:
+    apiPort: 9000
+    consolePort: 9001
+
+postgres:
+  image: postgres:16
+  database: mlflow
+  user: mlflow
+  password: ""
+  storage: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  service:
+    port: 5432
+
+mlflow:
+  image: registry.example.invalid/recsys/recsys-mlflow:required
+  imagePullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+  service:
+    port: 5000
+
+secret:
+  create: false
