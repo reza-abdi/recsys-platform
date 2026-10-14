@@ -1,0 +1,42 @@
+namespace:
+  create: false
+  name: kubeflow
+
+pvc:
+  name: recsys-mlops-pvc
+  storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""
+
+secret:
+  create: false
+  name: recsys-mlops-runtime
+  minioEndpoint: http://minio.experiment-tracking.svc.cluster.local:9000
+  dataPlatformMinioEndpoint: http://data-platform-minio.recsys-dataflow.svc.cluster.local:9000
+  minioRootUser: minio
+  minioRootPassword: ""
+  mlflowTrackingUri: http://mlflow.experiment-tracking.svc.cluster.local:5000
+  mlflowExperimentName: recsys-bst-ranking
+  modelRegistryPostgresUri: postgresql://mlflow:${POSTGRES_PASSWORD}@postgres.experiment-tracking.svc.cluster.local:5432/mlflow
+  modelStoreBucket: recsys-model-store
+  modelStorePrefix: triton/bst
+  promotionManifestKey: promotions/bst/latest.json
+  icebergCatalogName: recsys_features
+  icebergWarehouse: s3a://recsys-offline-feature-store/warehouse
+  hudiEnabled: "true"
+  hudiCatalogName: recsys_features
+  hudiWarehouse: s3a://recsys-offline-feature-store/warehouse
+  hudiDatasetTable: ml.bst_samples_native_v2
+  hudiCleanHoursRetained: "2160"
+  hudiZookeeperUrl: zookeeper.recsys-dataflow.svc.cluster.local
+  hudiZookeeperPort: "2181"
+  hudiZookeeperBasePath: /hudi/locks/bst_samples_native_v2
+  hudiZookeeperLockKey: bst_samples_native_v2
+
+rbac:
+  create: true
+  serviceAccountNames:
+    - default
+    - pipeline-runner
+    - default-editor
