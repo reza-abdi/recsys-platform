@@ -1,0 +1,32 @@
+milvus:
+  # The production node pool is quota-capped. Keep the 2 CPU / 4 GiB limits
+  # from values.yaml, but reserve only the steady-state footprint needed by
+  # the current ~1k-vector FLAT index so scheduling remains deterministic.
+  annotations:
+    sidecar.istio.io/inject: "false"
+  standalone:
+    persistence:
+      persistentVolumeClaim:
+        # The project SSD/pd-balanced quota is saturated by the existing
+        # platform. This small FLAT index is latency-insensitive on disk, so
+        # use durable pd-standard capacity instead of consuming SSD quota.
+        storageClass: standard
+    resources:
+      requests:
+        cpu: 150m
+        memory: 1Gi
+    nodeSelector:
+      recsys.ai/pool: cpu-services
+    tolerations:
+      - key: recsys.ai/workload
+        operator: Equal
+        value: cpu-services
+        effect: NoSchedule
+  etcd:
+    podAnnotations:
+      # Milvus standalone is intentionally outside the mesh. Keep its etcd
+      # peer outside too; otherwise STRICT mTLS resets plain gRPC on 2379.
+      sidecar.istio.io/inject: "false"
+    persistence:
+      # Keep Milvus metadata durable while avoiding the same SSD quota.
+      storageClass: standard
