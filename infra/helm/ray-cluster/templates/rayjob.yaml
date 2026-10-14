@@ -1,0 +1,119 @@
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: {{ .Values.job.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: recsys-ray-tune
+spec:
+  shutdownAfterJobFinishes: {{ .Values.job.shutdownAfterJobFinishes }}
+  ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished }}
+  entrypoint: >-
+    python /opt/recsys/apps/ml-system/src/training/ray_tune_train_bst.py
+    --base-config-path {{ .Values.entrypoint.baseConfigPath }}
+    --split-dir {{ .Values.entrypoint.splitDir }}
+    --output-dir {{ .Values.entrypoint.outputDir }}
+    --training-percent {{ .Values.entrypoint.trainingPercent }}
+    --num-epochs {{ .Values.entrypoint.numEpochs }}
+    --max-trials {{ .Values.entrypoint.maxTrials }}
+    --parallel-trials {{ .Values.entrypoint.parallelTrials }}
+    --cpus-per-trial {{ .Values.entrypoint.cpusPerTrial }}
+    --gpus-per-trial {{ .Values.entrypoint.gpusPerTrial }}
+    --best-result-path {{ .Values.entrypoint.bestResultPath }}
+  rayClusterSpec:
+    headGroupSpec:
+      serviceType: ClusterIP
+      rayStartParams:
+        dashboard-host: "0.0.0.0"
+        dashboard-agent-grpc-port: {{ .Values.head.dashboardAgentGrpcPort | quote }}
+        runtime-env-agent-port: {{ .Values.head.runtimeEnvAgentPort | quote }}
+        num-cpus: {{ .Values.head.rayNumCpus | quote }}
+        memory: {{ .Values.head.rayMemoryBytes | quote }}
+        object-store-memory: {{ .Values.head.objectStoreMemoryBytes | quote }}
+      template:
+        spec:
+          {{- with .Values.head.nodeSelector }}
+          nodeSelector:
+{{ toYaml . | indent 12 }}
+          {{- end }}
+          {{- with .Values.head.tolerations }}
+          tolerations:
+{{ toYaml . | indent 12 }}
+          {{- end }}
+          containers:
+            - name: ray-head
+              image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              envFrom:
+                - secretRef:
+                    name: {{ .Values.runtime.secretName }}
+              resources:
+                requests:
+                  cpu: {{ .Values.head.cpuRequest | quote }}
+                  memory: {{ .Values.head.memoryRequest | quote }}
+                limits:
+                  cpu: {{ .Values.head.cpuLimit | quote }}
+                  memory: {{ .Values.head.memoryLimit | quote }}
+              volumeMounts:
+                - name: recsys-workspace
+                  mountPath: {{ .Values.runtime.workspaceMountPath }}
+          volumes:
+            - name: recsys-workspace
+              persistentVolumeClaim:
+                claimName: {{ .Values.runtime.pvcName }}
+    workerGroupSpecs:
+      - groupName: cpu-or-gpu-workers
+        replicas: {{ .Values.worker.replicas }}
+        minReplicas: {{ .Values.worker.replicas }}
+        maxReplicas: {{ .Values.worker.replicas }}
+        rayStartParams:
+          dashboard-agent-grpc-port: {{ .Values.worker.dashboardAgentGrpcPort | quote }}
+          runtime-env-agent-port: {{ .Values.worker.runtimeEnvAgentPort | quote }}
+          memory: {{ .Values.worker.rayMemoryBytes | quote }}
+          object-store-memory: {{ .Values.worker.objectStoreMemoryBytes | quote }}
+        template:
+          spec:
+            {{- if .Values.gpu.enabled }}
+            nodeSelector:
+{{ toYaml .Values.gpu.nodeSelector | indent 14 }}
+            tolerations:
+              - key: nvidia.com/gpu
+                operator: Exists
+                effect: NoSchedule
+            {{- else }}
+            {{- with .Values.worker.nodeSelector }}
+            nodeSelector:
+{{ toYaml . | indent 14 }}
+            {{- end }}
+            {{- with .Values.worker.tolerations }}
+            tolerations:
+{{ toYaml . | indent 14 }}
+            {{- end }}
+            {{- end }}
+            containers:
+              - name: ray-worker
+                image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+                imagePullPolicy: {{ .Values.image.pullPolicy }}
+                envFrom:
+                  - secretRef:
+                      name: {{ .Values.runtime.secretName }}
+                resources:
+                  requests:
+                    cpu: {{ .Values.worker.cpuRequest | quote }}
+                    memory: {{ .Values.worker.memoryRequest | quote }}
+                    {{- if .Values.gpu.enabled }}
+                    nvidia.com/gpu: {{ .Values.gpu.limit }}
+                    {{- end }}
+                  limits:
+                    cpu: {{ .Values.worker.cpuLimit | quote }}
+                    memory: {{ .Values.worker.memoryLimit | quote }}
+                    {{- if .Values.gpu.enabled }}
+                    nvidia.com/gpu: {{ .Values.gpu.limit }}
+                    {{- end }}
+                volumeMounts:
+                  - name: recsys-workspace
+                    mountPath: {{ .Values.runtime.workspaceMountPath }}
+            volumes:
+              - name: recsys-workspace
+                persistentVolumeClaim:
+                  claimName: {{ .Values.runtime.pvcName }}
