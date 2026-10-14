@@ -1,0 +1,58 @@
+# Two lightweight llama.cpp replicas share the two existing e2-standard-8
+# recsys-mlops-cpu nodes. Required hostname spreading keeps one model replica
+# on each node while two-core limits let them accelerate when CPU is available.
+replicaCount: 2
+
+image:
+  repository: ghcr.io/ggml-org/llama.cpp
+  tag: server
+  digest: sha256:9b518883e8faab479650ec802e02c9e37c6bb21d36168509efd8fb3c87fc1648
+  pullPolicy: IfNotPresent
+
+model:
+  repository: ggml-org/Qwen3.5-0.8B-GGUF
+  quantization: Q4_0
+  alias: qwen3.5-0.8b
+  # Sized for grounded agent turns containing MCP payloads. The live 0.8B Q4
+  # pods retain ample space under their 3Gi memory limit at this setting.
+  contextSize: 16384
+  maxPredictedTokens: 768
+  # Immediate tool selection is required on the shared CPU pool. A non-zero
+  # hidden-thinking budget can exhaust the five-minute gateway request limit.
+  reasoningMode: "off"
+  parallel: 1
+  threads: 2
+  threadsBatch: 2
+  batchSize: 512
+  ubatchSize: 128
+  disableMultimodal: true
+  metrics: true
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 1536Mi
+  limits:
+    cpu: "2"
+    memory: 3Gi
+
+nodeSelector:
+  cloud.google.com/gke-nodepool: recsys-mlops-cpu
+
+tolerations: []
+
+topologySpread:
+  enabled: true
+  maxSkew: 1
+  topologyKey: kubernetes.io/hostname
+  whenUnsatisfiable: DoNotSchedule
+
+cache:
+  persistence:
+    enabled: false
+  emptyDir:
+    sizeLimit: 2Gi
+
+podMonitoring:
+  enabled: true
+  interval: 30s
