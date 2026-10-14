@@ -1,0 +1,151 @@
+{{- $dashboardChecksum := "" -}}
+{{- range $path, $_ := .Files.Glob "dashboards/*.json" -}}
+{{- $dashboardChecksum = printf "%s%s:%s\n" $dashboardChecksum $path ($.Files.Get $path | sha256sum) -}}
+{{- end -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recsys-grafana-datasources
+  namespace: {{ .Values.namespace.name }}
+data:
+  datasources.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://recsys-prometheus:9090
+        isDefault: true
+        jsonData:
+          exemplarTraceIdDestinations:
+            - name: trace_id
+              datasourceUid: Tempo
+      - name: Loki
+        uid: Loki
+        type: loki
+        access: proxy
+        url: http://recsys-loki:3100
+      - name: Tempo
+        uid: Tempo
+        type: tempo
+        access: proxy
+        url: http://recsys-tempo:3200
+        jsonData:
+          tracesToLogsV2:
+            datasourceUid: Loki
+            spanStartTimeShift: -1m
+            spanEndTimeShift: 1m
+            filterByTraceID: true
+          nodeGraph:
+            enabled: true
+---
+{{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recsys-grafana-dashboard-{{ base $path | trimSuffix ".json" | replace "_" "-" | replace "." "-" | trunc 50 | trimSuffix "-" }}
+  namespace: {{ $.Values.namespace.name }}
+  labels:
+    grafana_dashboard: "1"
+    app.kubernetes.io/name: recsys-grafana
+    recsys.io/dashboard-folder: RecSys
+data:
+  {{ base $path }}: |
+{{ $.Files.Get $path | indent 4 }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recsys-grafana
+  namespace: {{ .Values.namespace.name }}
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: recsys-grafana
+  template:
+    metadata:
+      annotations:
+        checksum/grafana-dashboards: {{ $dashboardChecksum | sha256sum | quote }}
+        checksum/grafana-datasources: {{ printf "%s-%s-%s" .Values.images.grafana .Values.namespace.name "datasources-v1" | sha256sum | quote }}
+      labels:
+        app: recsys-grafana
+    spec:
+      containers:
+        - name: grafana
+          image: {{ .Values.images.grafana }}
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: admin
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: admin
+            - name: GF_SERVER_DOMAIN
+              value: {{ .Values.grafana.domain | quote }}
+            - name: GF_SERVER_ROOT_URL
+              value: {{ .Values.grafana.rootUrl | quote }}
+            - name: GF_PATHS_PROVISIONING
+              value: /etc/grafana/provisioning
+          ports:
+            - name: http
+              containerPort: 3000
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+      volumes:
+        - name: datasources
+          configMap:
+            name: recsys-grafana-datasources
+        - name: dashboards
+          projected:
+            sources:
+{{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
+              - configMap:
+                  name: recsys-grafana-dashboard-{{ base $path | trimSuffix ".json" | replace "_" "-" | replace "." "-" | trunc 50 | trimSuffix "-" }}
+                  items:
+                    - key: {{ base $path }}
+                      path: {{ base $path }}
+{{- end }}
+        - name: dashboard-provider
+          configMap:
+            name: recsys-grafana-dashboard-provider
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recsys-grafana-dashboard-provider
+  namespace: {{ .Values.namespace.name }}
+data:
+  dashboards.yml: |
+    apiVersion: 1
+    providers:
+      - name: recsys
+        folder: RecSys
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: recsys-grafana
+  namespace: {{ .Values.namespace.name }}
+spec:
+  selector:
+    app: recsys-grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http

@@ -1,0 +1,76 @@
+{
+  "uid": "recsys-logs",
+  "title": "Logs Overview",
+  "tags": ["recsys", "logs", "loki"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "15s",
+  "time": { "from": "now-30m", "to": "now" },
+  "templating": {"list": [
+    {"name":"namespace","type":"query","datasource":{"type":"prometheus","uid":"Prometheus"},"query":{"query":"label_values(up, namespace)","refId":"v1"},"includeAll":true,"multi":true,"allValue":".*","current":{"text":"All","value":"$__all"}},
+    {"name":"agent","type":"query","datasource":{"type":"prometheus","uid":"Prometheus"},"query":{"query":"label_values(recsys_agent_calls_total, agent)","refId":"v2"},"includeAll":true,"multi":true,"allValue":".*","current":{"text":"All","value":"$__all"}},
+    {"name":"model","type":"query","datasource":{"type":"prometheus","uid":"Prometheus"},"query":{"query":"label_values(up{job=\"recsys-llama-cpp\"}, model)","refId":"v3"},"includeAll":true,"multi":true,"allValue":".*","current":{"text":"All","value":"$__all"}},
+    {"name":"tool","type":"query","datasource":{"type":"prometheus","uid":"Prometheus"},"query":{"query":"label_values(recsys_agent_tool_calls_total, tool)","refId":"v4"},"includeAll":true,"multi":true,"allValue":".*","current":{"text":"All","value":"$__all"}}
+  ]},
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Error Logs",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "targets": [{ "expr": "sum(count_over_time({namespace=~\"api-serving|recsys-dataflow|kubeflow|experiment-tracking|kagent|llm-inference|agentgateway-system\"} |= \"ERROR\" [5m])) or vector(0)", "legendFormat": "errors" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 5 }] } } },
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "API Log Volume",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "targets": [{ "expr": "sum(count_over_time({namespace=\"api-serving\"}[5m]))", "legendFormat": "lines" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "palette-classic" } } },
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Log Volume by Namespace",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "targets": [{ "expr": "sum by (namespace) (rate({namespace=~\"api-serving|recsys-dataflow|kubeflow|experiment-tracking|observability|kagent|llm-inference|agentgateway-system\"}[1m]))", "legendFormat": "{{namespace}}" }],
+      "fieldConfig": { "defaults": { "unit": "logs/s", "custom": { "drawStyle": "bars", "fillOpacity": 35, "stacking": { "mode": "normal", "group": "A" } } } },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Errors Over Time",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "targets": [{ "expr": "sum by (namespace, pod) (rate({namespace=~\"api-serving|recsys-dataflow|kubeflow|experiment-tracking|kagent|llm-inference|agentgateway-system\"} |= \"ERROR\" [1m]))", "legendFormat": "{{namespace}}/{{pod}}" }],
+      "fieldConfig": { "defaults": { "unit": "logs/s", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20 } } },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 5,
+      "type": "logs",
+      "title": "Recent API Errors",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 9 },
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "targets": [{ "expr": "{namespace=\"api-serving\"} |= \"ERROR\"" }],
+      "options": { "showLabels": true, "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" }
+    },
+    {
+      "id": 6,
+      "type": "logs",
+      "title": "Agent, LLM, Gateway, Airflow and Drift Logs",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 13 },
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "targets": [{ "expr": "{namespace=~\"recsys-dataflow|kagent|llm-inference|agentgateway-system\"} |~ \"ERROR|WARN|drift|retrain|agent|gateway\"" }],
+      "options": { "showLabels": true, "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" }
+    }
+  ]
+}

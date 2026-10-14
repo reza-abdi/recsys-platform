@@ -1,0 +1,38 @@
+namespace:
+  create: false
+  name: observability
+
+retention:
+  prometheus: 7d
+
+storage:
+  prometheus: 20Gi
+  grafana: 5Gi
+  loki: 20Gi
+  tempo: 10Gi
+
+persistence:
+  prometheus:
+    enabled: true
+    storageClassName: standard-rwo
+
+langfuse:
+  enabled: true
+  endpoint: http://langfuse-web.langfuse.svc.cluster.local:3000/api/public/otel
+
+# Production observability enforces STRICT mTLS and has Istio injection
+# enabled. Run the probe here so its native sidecar can authenticate to the
+# Pushgateway without changing the intentionally mesh-disabled LLM namespace.
+llmProbe:
+  namespace: observability
+  # Keep this finite orchestration probe off the memory-tight inference node.
+  nodeSelector:
+    recsys.ai/workload: ml-system
+  tolerations:
+    - {key: recsys.ai/workload, operator: Equal, value: ml-system, effect: NoSchedule}
+
+# The two collector replicas use a hard hostname spread. The second GKE node
+# is dedicated with this taint, so the toleration is required for HA rollout.
+otelCollector:
+  tolerations:
+    - {key: recsys.ai/workload, operator: Equal, value: ml-system, effect: NoSchedule}

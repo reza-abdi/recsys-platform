@@ -1,0 +1,151 @@
+{
+  "uid": "recsys-data-pipeline",
+  "title": "Data Pipeline Observability",
+  "tags": ["recsys", "data-platform", "streaming"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 6,
+  "refresh": "15s",
+  "graphTooltip": 1,
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Event Throughput",
+      "description": "Behavior-event rate observed at the online Flink CDC source. Both generated traffic and demo-web view/cart/purchase events converge here; the offline consumer is excluded to avoid double counting.",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "sum(flink_taskmanager_job_task_numRecordsOutPerSecond{namespace=\"recsys-dataflow\",job_name=~\".*realtime_online$\",task_name=~\"Source:_cdc_behavior_events_source.*\"}) or vector(0)", "legendFormat": "events/s" }],
+      "fieldConfig": { "defaults": { "unit": "eps", "decimals": 2, "color": { "mode": "palette-classic" } } },
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Late Event Rate",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "sum(rate(recsys_streaming_late_events_total{pipeline_role=\"online\"}[$__rate_interval])) / clamp_min(sum(rate(recsys_streaming_events_total{pipeline_role=\"online\"}[$__rate_interval])), 1) or vector(0)", "legendFormat": "late rate" }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "decimals": 2, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.01 }, { "color": "red", "value": 0.05 }] } } },
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Duplicate Event Rate",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "sum(rate(recsys_streaming_duplicate_events_total{pipeline_role=\"online\"}[$__rate_interval])) / clamp_min(sum(rate(recsys_streaming_events_total{pipeline_role=\"online\"}[$__rate_interval])), 1) or vector(0)", "legendFormat": "duplicate rate" }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "decimals": 2, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.001 }, { "color": "red", "value": 0.01 }] } } },
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Stream Freshness",
+      "description": "Seconds since the online Flink pipeline last processed an event. Missing live metrics remain NO DATA instead of green zero.",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "time() - max(recsys_streaming_last_event_unixtime{pipeline_role=\"online\"})", "legendFormat": "event age" }],
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 0, "noValue": "NO DATA", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 60 }, { "color": "red", "value": 300 }] } } },
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Streaming Event Rates",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "sum(flink_taskmanager_job_task_numRecordsOutPerSecond{namespace=\"recsys-dataflow\",job_name=~\".*realtime_online$\",task_name=~\"Source:_cdc_behavior_events_source.*\"})", "legendFormat": "events/s" },
+        { "expr": "sum(rate(recsys_streaming_late_events_total{pipeline_role=\"online\"}[$__rate_interval]))", "legendFormat": "late/s" },
+        { "expr": "sum(rate(recsys_streaming_duplicate_events_total{pipeline_role=\"online\"}[$__rate_interval]))", "legendFormat": "duplicates/s" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "eps", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20, "stacking": { "mode": "none", "group": "A" } } } },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Late Arrival Severity",
+      "description": "Maximum lateness in the active quality window. Bursty state is intentionally not mixed with the seconds axis.",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "max(recsys_streaming_current_max_late_seconds{pipeline_role=\"online\"})", "legendFormat": "max late seconds" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20 } } },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Redis Command Rate",
+      "gridPos": { "x": 0, "y": 12, "w": 8, "h": 8 },
+      "targets": [
+        { "expr": "sum(rate(redis_commands_processed_total[$__rate_interval]))", "legendFormat": "Redis commands/s" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20 } } },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Redis Connected Clients",
+      "description": "Current client connections reported by the Redis exporter.",
+      "gridPos": { "x": 8, "y": 12, "w": 4, "h": 8 },
+      "targets": [{ "expr": "max(redis_connected_clients)", "legendFormat": "clients" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "noValue": "NO DATA", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 100 }, { "color": "red", "value": 500 }] } } },
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 8,
+      "type": "bargauge",
+      "title": "Latest Offline Feature Drift",
+      "description": "PSI values from the most recently pushed offline drift run only.",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [{ "expr": "recsys_ml_feature_drift_psi and on(job, run_id) topk(1, push_time_seconds{job=\"recsys_offline_feature_drift\"})", "legendFormat": "{{feature_view}} / {{feature}}" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 3, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.1 }, { "color": "red", "value": 0.2 }] } } },
+      "options": { "displayMode": "gradient", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true }
+    },
+    {
+      "id": 9,
+      "type": "bargauge",
+      "title": "Offline Generator Volume",
+      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "recsys_data_quality_metric{check_name=\"generator.offline.synthetic_issues\",metric_name=~\"row_count_.*\"}", "legendFormat": "{{metric_name}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "palette-classic" } } },
+      "options": { "displayMode": "gradient", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true }
+    },
+    {
+      "id": 10,
+      "type": "bargauge",
+      "title": "Offline Cardinality",
+      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "recsys_data_quality_metric{check_name=\"generator.offline.synthetic_issues\",metric_name=~\"approx_count_distinct_.*\"}", "legendFormat": "{{metric_name}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "palette-classic" } } },
+      "options": { "displayMode": "gradient", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true }
+    },
+    {
+      "id": 11,
+      "type": "bargauge",
+      "title": "Offline Data Issues",
+      "gridPos": { "x": 0, "y": 28, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "recsys_data_quality_metric{check_name=\"generator.offline.synthetic_issues\",metric_name=~\"duplicate_rate_before_dedup|duplicate_rate_after_dedup|top_city_ratio|top_event_category_ratio\"}", "legendFormat": "{{metric_name}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 3, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.05 }, { "color": "red", "value": 0.15 }] } } },
+      "options": { "displayMode": "gradient", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true }
+    },
+    {
+      "id": 12,
+      "type": "bargauge",
+      "title": "Schema Evolution Nulls",
+      "gridPos": { "x": 12, "y": 28, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "recsys_data_quality_metric{check_name=\"generator.offline.synthetic_issues\",metric_name=~\"schema_v1_events|schema_v2_events|null_device_type_events|exact_duplicate_rows\"}", "legendFormat": "{{metric_name}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 100 }] } } },
+      "options": { "displayMode": "gradient", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true }
+    }
+  ]
+}
