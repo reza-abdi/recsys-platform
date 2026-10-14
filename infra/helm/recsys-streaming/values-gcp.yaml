@@ -1,0 +1,18 @@
+flink:
+  istioInject: "true"
+  taskManagerProcessMemory: 4096m
+  taskManagerTaskHeapMemory: 2048m
+  taskManagerManagedMemory: 512m
+  taskManagerJvmOverheadMax: 1024m
+realtimeProducer:
+  replicas: 0
+realtimeFlinkConsumer:
+  istioInject: "true"
+  # MinIO-backed RocksDB checkpoints can take several minutes under load.
+  # Avoid queueing overlapping checkpoint requests and unnecessary job failovers.
+  checkpointIntervalSeconds: "300"
+  online:
+    startingOffsets: committed-offsets
+flinkAutoscaler:
+  taskManagerHpa:
+    maxReplicas: 2
