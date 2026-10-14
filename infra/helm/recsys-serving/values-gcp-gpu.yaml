@@ -1,0 +1,18 @@
+kserve:
+  resources:
+    requests: {cpu: "1", memory: 4Gi, nvidia.com/gpu: "1"}
+    limits: {cpu: "3", memory: 8Gi, nvidia.com/gpu: "1"}
+  nodeSelector: {cloud.google.com/gke-accelerator: nvidia-tesla-t4}
+  tolerations:
+    - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+  sharedMemory: {sizeLimit: 1Gi}
+autoscaling:
+  kserveResource:
+    # See values-gcp-cpu.yaml: the predictor Deployment does not exist when the
+    # chart is first admitted on a fresh cluster.
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    pollingInterval: 15
+    cooldownPeriod: 240
+    cpu: {enabled: true, metricType: Utilization, value: "35"}

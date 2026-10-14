@@ -1,0 +1,21 @@
+kserve:
+  resources:
+    requests: {cpu: 300m, memory: 2Gi}
+    limits: {cpu: "2", memory: 4Gi}
+  servingRuntime:
+    resources:
+      requests: {cpu: 300m, memory: 2Gi}
+      limits: {cpu: "2", memory: 4Gi}
+  sharedMemory: {sizeLimit: 512Mi}
+autoscaling:
+  kserveResource:
+    # KEDA validates scaleTargetRef at admission time, while KServe creates the
+    # predictor Deployment asynchronously from the InferenceService. Enable
+    # this after the first predictor is Ready (the Jenkins serving rollout does
+    # that); bootstrap uses KServe's native autoscaler.
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    pollingInterval: 15
+    cooldownPeriod: 240
+    cpu: {enabled: true, metricType: Utilization, value: "35"}

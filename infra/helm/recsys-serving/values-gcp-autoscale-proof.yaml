@@ -1,0 +1,16 @@
+kserve:
+  resources:
+    requests: {cpu: 100m, memory: 768Mi}
+    limits: {cpu: "2", memory: 4Gi}
+  servingRuntime:
+    resources:
+      requests: {cpu: 100m, memory: 768Mi}
+      limits: {cpu: "2", memory: 4Gi}
+autoscaling:
+  kserveResource:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    pollingInterval: 15
+    cooldownPeriod: 240
+    cpu: {enabled: true, metricType: Utilization, value: "15"}

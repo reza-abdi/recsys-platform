@@ -1,0 +1,88 @@
+{{- if .Values.kserve.enabled }}
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: {{ .Values.kserve.inferenceService.name }}
+  namespace: {{ .Values.kserve.namespace.name }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.kserve.inferenceService.name }}
+  annotations:
+    "helm.sh/resource-policy": keep
+    serving.kserve.io/deploymentMode: {{ .Values.kserve.inferenceService.deploymentMode | quote }}
+{{- if .Values.autoscaling.kserveResource.enabled }}
+    serving.kserve.io/autoscalerClass: "external"
+{{- end }}
+spec:
+  predictor:
+    annotations:
+      recsys.ai/triton-health-probes: "v2-model-ready"
+    serviceAccountName: {{ .Values.kserve.serviceAccount.name }}
+    {{- if .Values.kserve.nodeSelector }}
+    nodeSelector:
+{{ toYaml .Values.kserve.nodeSelector | indent 6 }}
+    {{- end }}
+    {{- if .Values.kserve.tolerations }}
+    tolerations:
+{{ toYaml .Values.kserve.tolerations | indent 6 }}
+    {{- end }}
+    volumes:
+      - name: triton-shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: {{ .Values.kserve.sharedMemory.sizeLimit | quote }}
+    model:
+      modelFormat:
+        name: triton
+      protocolVersion: v2
+      storageUri: {{ .Values.kserve.inferenceService.storageUri | quote }}
+      volumeMounts:
+        - name: triton-shm
+          mountPath: /dev/shm
+      resources:
+{{ toYaml .Values.kserve.resources | indent 8 }}
+{{- if and .Values.kserve.inferenceService.retainCandidate .Values.kserve.inferenceService.candidateStorageUri }}
+---
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: {{ .Values.kserve.inferenceService.candidateName }}
+  namespace: {{ .Values.kserve.namespace.name }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.kserve.inferenceService.candidateName }}
+    app.kubernetes.io/part-of: {{ .Values.kserve.inferenceService.name }}
+    recsys.ai/ab-variant: candidate
+  annotations:
+    serving.kserve.io/deploymentMode: {{ .Values.kserve.inferenceService.deploymentMode | quote }}
+{{- if .Values.autoscaling.kserveResource.enabled }}
+    serving.kserve.io/autoscalerClass: "external"
+{{- end }}
+spec:
+  predictor:
+    annotations:
+      recsys.ai/triton-health-probes: "v2-model-ready"
+    serviceAccountName: {{ .Values.kserve.serviceAccount.name }}
+    {{- if .Values.kserve.nodeSelector }}
+    nodeSelector:
+{{ toYaml .Values.kserve.nodeSelector | indent 6 }}
+    {{- end }}
+    {{- if .Values.kserve.tolerations }}
+    tolerations:
+{{ toYaml .Values.kserve.tolerations | indent 6 }}
+    {{- end }}
+    volumes:
+      - name: triton-shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: {{ .Values.kserve.sharedMemory.sizeLimit | quote }}
+    model:
+      modelFormat:
+        name: triton
+      protocolVersion: v2
+      storageUri: {{ .Values.kserve.inferenceService.candidateStorageUri | quote }}
+      volumeMounts:
+        - name: triton-shm
+          mountPath: /dev/shm
+      resources:
+{{ toYaml .Values.kserve.resources | indent 8 }}
+{{- end }}
+{{- end }}

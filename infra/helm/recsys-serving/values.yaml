@@ -1,0 +1,74 @@
+kserve:
+  enabled: true
+  namespace:
+    create: true
+    name: kserve-triton-inference
+  servingRuntime:
+    create: true
+    name: recsys-tritonserver
+    image: nvcr.io/nvidia/tritonserver:23.05-py3
+    resources:
+      requests: {cpu: "1", memory: 4Gi}
+      limits: {cpu: "3", memory: 6Gi}
+  inferenceService:
+    name: recsys-bst-triton
+    candidateName: recsys-bst-triton-candidate
+    deploymentMode: RawDeployment
+    storageUri: s3://recsys-model-store/triton/bst/latest
+    candidateStorageUri: ""
+    retainCandidate: false
+  grpcService:
+    name: recsys-bst-triton-grpc
+    candidateName: recsys-bst-triton-candidate-grpc
+    port: 9000
+    targetPort: 9000
+    selector: {app: isvc.recsys-bst-triton-predictor}
+    candidateSelector: {app: isvc.recsys-bst-triton-candidate-predictor}
+  serviceAccount: {name: recsys-kserve-minio}
+  secret:
+    name: recsys-kserve-minio
+    create: false
+    minioEndpoint: minio.experiment-tracking.svc.cluster.local:9000
+    minioUseHttps: "0"
+    minioRegion: us-east-1
+    accessKeyId: minio
+    secretAccessKey: ""
+  resources:
+    requests: {cpu: "1", memory: 2Gi}
+    limits: {cpu: "3", memory: 6Gi}
+  nodeSelector: {}
+  tolerations: []
+  sharedMemory: {sizeLimit: 256Mi}
+
+autoscaling:
+  http:
+    enabled: true
+    externalScalerAddress: keda-add-ons-http-external-scaler.keda:9090
+    kserve:
+      enabled: false
+      name: recsys-bst-triton-http
+      host: recsys-bst-triton.local
+      deploymentName: recsys-bst-triton-predictor
+      serviceName: recsys-bst-triton-http
+      targetServiceSelector: {app: isvc.recsys-bst-triton-predictor}
+      pathPrefix: /
+      minReplicas: 1
+      maxReplicas: 3
+      scaledownPeriod: 180
+      requestRate: {targetValue: 3, window: 30s, granularity: 1s}
+    limits: {cpu: 500m, memory: 512Mi}
+  kserveResource:
+    enabled: true
+    name: recsys-bst-triton-resource
+    candidateName: recsys-bst-triton-candidate-resource
+    deploymentName: recsys-bst-triton-predictor
+    candidateDeploymentName: recsys-bst-triton-candidate-predictor
+    minReplicas: 1
+    maxReplicas: 3
+    pollingInterval: 15
+    cooldownPeriod: 180
+    restoreToOriginalReplicaCount: true
+    hpaName: recsys-bst-triton-predictor
+    candidateHpaName: recsys-bst-triton-candidate-predictor
+    cpu: {enabled: true, metricType: Utilization, value: "50"}
+    memory: {enabled: false, metricType: Utilization, value: "70"}
