@@ -1,0 +1,142 @@
+{{- if .Values.istio.enabled }}
+{{- range .Values.istio.namespaces }}
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: recsys-strict-mtls
+  namespace: {{ . }}
+spec:
+  mtls:
+    mode: STRICT
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: recsys-default-deny
+  namespace: {{ . }}
+spec: {}
+{{- end }}
+{{- if has "recsys-dataflow" .Values.istio.namespaces }}
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: recsys-dataflow-minio-s3-permissive
+  namespace: recsys-dataflow
+spec:
+  selector:
+    matchLabels:
+      app: data-platform-minio
+  portLevelMtls:
+    9000:
+      mode: PERMISSIVE
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: recsys-dataflow-feature-postgres-permissive
+  namespace: recsys-dataflow
+spec:
+  selector:
+    matchLabels:
+      app: feature-postgres
+  portLevelMtls:
+    5432:
+      mode: PERMISSIVE
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: recsys-dataflow-redis-permissive
+  namespace: recsys-dataflow
+spec:
+  selector:
+    matchLabels:
+      app: redis
+  portLevelMtls:
+    6379:
+      mode: PERMISSIVE
+{{- end }}
+{{- if has "kubeflow" .Values.istio.namespaces }}
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: recsys-kubeflow-ml-pipeline-permissive
+  namespace: kubeflow
+spec:
+  selector:
+    matchLabels:
+      app: ml-pipeline
+  mtls:
+    mode: PERMISSIVE
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: recsys-kubeflow-metadata-grpc-permissive
+  namespace: kubeflow
+spec:
+  selector:
+    matchLabels:
+      component: metadata-grpc-server
+  mtls:
+    mode: PERMISSIVE
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: recsys-kubeflow-seaweedfs-permissive
+  namespace: kubeflow
+spec:
+  selector:
+    matchLabels:
+      app: seaweedfs
+  mtls:
+    mode: PERMISSIVE
+{{- end }}
+{{- if has "observability" .Values.istio.namespaces }}
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: recsys-prometheus-keda-permissive
+  namespace: observability
+spec:
+  selector:
+    matchLabels:
+      app: recsys-prometheus
+  portLevelMtls:
+    9090:
+      mode: PERMISSIVE
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: recsys-loki-ingest-permissive
+  namespace: observability
+spec:
+  selector:
+    matchLabels:
+      app: recsys-loki
+  portLevelMtls:
+    3100:
+      mode: PERMISSIVE
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: recsys-tempo-otlp-permissive
+  namespace: observability
+spec:
+  selector:
+    matchLabels:
+      app: recsys-tempo
+  portLevelMtls:
+    4317:
+      mode: PERMISSIVE
+    4318:
+      mode: PERMISSIVE
+{{- end }}
+{{- end }}
