@@ -1,0 +1,93 @@
+project_id = "your-gcp-project-id"
+
+# Vietnam/Singapore latency-friendly default. Make sure the zone has quota for your GPU.
+region = "asia-southeast1"
+zone   = "asia-southeast1-b"
+
+name_prefix = "recsys-mlops"
+
+# Cost-saving production topology:
+# - Two non-Spot CPU nodes host stateful services and shared LLM inference.
+# - One non-Spot ML node hosts CPU training and serving.
+# - Dedicated LLM and GPU pools are disabled.
+cpu_machine_type = "e2-standard-8"
+cpu_min_nodes    = 2
+cpu_max_nodes    = 2
+cpu_spot         = false
+
+# Dedicated LLM sizing remains available as a rollback profile, but shared mode
+# does not create this pool and places both Qwen replicas on the CPU pool.
+llm_cpu_machine_type = "n2-standard-4"
+llm_cpu_min_nodes    = 1
+llm_cpu_max_nodes    = 2
+llm_cpu_disk_size_gb = 30
+llm_cpu_disk_type    = "pd-standard"
+llm_cpu_spot         = false
+llm_node_pool_mode   = "cpu-services-shared"
+llm_optimization_profile = "baseline"
+
+ml_machine_type = "e2-standard-4"
+ml_min_nodes    = 1
+ml_max_nodes    = 1
+ml_disk_size_gb = 50
+ml_spot         = false
+
+gpu_machine_type      = "n1-standard-8"
+enable_gpu_pool       = false
+gpu_accelerator_type  = "nvidia-tesla-t4"
+gpu_accelerator_count = 1
+gpu_min_nodes         = 1
+gpu_max_nodes         = 2
+gpu_spot              = false
+
+artifact_registry_repository = "recsys"
+image_tag                    = "gcp"
+
+# Optional: point specific services to already-built images.
+# image_overrides = {
+#   online_feature_api  = "asia-southeast1-docker.pkg.dev/your-gcp-project-id/recsys/recsys-online-feature-api:gcp"
+#   inference_api       = "asia-southeast1-docker.pkg.dev/your-gcp-project-id/recsys/recsys-inference-api:gcp"
+#   training_repository = "asia-southeast1-docker.pkg.dev/your-gcp-project-id/recsys/recsys-mlops-training"
+# }
+
+deploy_ray_job = false
+deploy_llm_inference = false
+# Agent Registry requires deploy_llm_inference=true and deploy_vault=true.
+deploy_agent_registry = false
+# API-key authentication requires deploy_vault=true when LLM inference is enabled.
+agent_gateway_auth_enabled = true
+deploy_gateway = false
+deploy_service_mesh = true
+deploy_vault = false
+
+# Vault migration is intentionally two-phase. Set deploy_vault=true, bootstrap
+# and verify the Vault-backed ExternalSecrets, then set this to false to remove
+# the legacy source Kubernetes Secrets from external-secrets.
+vault_legacy_source_secrets_enabled = true
+
+# Public gateway example. Create the A records first and point them at the
+# ingress-nginx LoadBalancer IP before enabling production certificates.
+# deploy_gateway             = true
+# gateway_domain             = "recsys-mlops.site"
+
+# Production Langfuse v4 reuses the existing GKE/VPC and adds managed data stores.
+deploy_langfuse            = false
+langfuse_backend_mode      = "managed"
+# Set false and apply once while mode is managed before an intentional
+# managed -> in_cluster cutover. Keep true for normal managed deployments.
+langfuse_managed_backend_deletion_protection = true
+langfuse_domain            = "langfuse.recsys-mlops.site"
+langfuse_chart_version     = "2.0.1"
+langfuse_app_version       = "4.17.0"
+langfuse_node_machine_type = "e2-standard-4"
+langfuse_node_count        = 3
+langfuse_retention_days    = 30
+# gateway_tls_enabled        = true
+# gateway_tls_cluster_issuer = "letsencrypt-prod"
+# gateway_tls_issuer_create  = true
+# gateway_tls_issuer_email   = "platform@example.com"
+
+# Recommended if you use the public GKE API endpoint:
+# master_authorized_cidr_blocks = [
+#   { cidr_block = "203.0.113.10/32", display_name = "office" }
+# ]
