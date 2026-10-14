@@ -1,0 +1,159 @@
+namespace:
+  create: true
+  name: ci
+
+productionTarget:
+  enabled: false
+  projectId: ""
+  region: ""
+  zone: ""
+  cluster: ""
+  context: ""
+  imageRegistry: ""
+
+serviceMesh:
+  jenkinsPodAnnotations:
+    sidecar.istio.io/inject: "false"
+
+jenkins:
+  enabled: true
+  image: jenkins/jenkins:lts-jdk17
+  replicas: 1
+  nodeSelector: {}
+  tolerations: []
+  adminUser: admin
+  adminSecretName: recsys-jenkins-admin
+  runtimeCredentialsSecret:
+    enabled: false
+    namespace: external-secrets
+    name: jenkins-runtime
+    url: http://recsys-jenkins.ci.svc.cluster.local:8080
+  github:
+    projectUrl: ""
+    repositoryUrl: ""
+    # The production webhook job deterministically checks out main. Alternate
+    # or manual jobs may still use DEPLOY_PULL_REQUESTS explicitly.
+    branchSpec: "*/main"
+  plugins:
+    installOnStartup: true
+    required:
+      - workflow-aggregator
+      - workflow-job
+      - workflow-cps
+      - workflow-scm-step
+      - workflow-multibranch
+      - pipeline-stage-view
+      - junit
+      - git
+      - github
+      - lockable-resources
+      - matrix-auth:3.3
+  runtimeTools:
+    installOnStartup: false
+    kubectlVersion: v1.33.0
+    helmVersion: v3.18.4
+    kubeconformVersion: v0.8.0
+    kubeconformSha256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+    arctlVersion: v0.4.0
+    arctlSha256: e564334357731c59faa3482f2978c21a205a60ad3bcc63a44465607cc74fa343
+    buildxVersion: v0.37.0
+    buildxSha256: ae43fa08c796b44efc86d7a63c55f73f7c35f3101188dea7bf93bcd6f99577ba
+  seedJob:
+    enabled: true
+    name: RecSys-GitHub-CICD
+    scriptPath: Jenkinsfile
+  service:
+    name: recsys-jenkins
+    type: ClusterIP
+    httpPort: 8080
+    agentPort: 50000
+  webhookIngress:
+    enabled: false
+    className: nginx
+    host: ""
+    path: /github-webhook/
+    pathType: Prefix
+    annotations: {}
+  pvc:
+    name: recsys-jenkins-home
+    volumeName: ""
+    storage: 20Gi
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: standard-rwo
+  # Production recovery can seed a local, immutable bootstrap bundle before
+  # the GitHub remote is available. Newer Git plugin releases reject file://
+  # checkouts unless Jenkins explicitly opts in.
+  javaOpts: "-Djenkins.install.runSetupWizard=false -Dhudson.model.DownloadService.never=true -Dhudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true"
+  dind:
+    enabled: true
+    image: docker:28-dind
+    storageDriver: overlay2
+    useJenkinsHomePvc: false
+    pvc:
+      enabled: false
+      name: recsys-jenkins-docker-graph
+      storage: 80Gi
+      accessModes:
+        - ReadWriteOnce
+      storageClassName: ""
+    gc:
+      enabled: true
+      retention: 168h
+      keepStorage: 40GB
+    insecureRegistries: []
+    resources:
+      requests:
+        # DinD is idle between image builds. Keep burst capacity in the limit,
+        # but do not reserve a fifth of a core during the A/B serving window.
+        cpu: 50m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 3Gi
+  resources:
+    requests:
+      cpu: 300m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 8Gi
+
+modelRolloutWatcher:
+  enabled: false
+  image: registry.example.invalid/recsys/recsys-mlops-training:required
+  imagePullPolicy: IfNotPresent
+  replicas: 1
+  nodeSelector: {}
+  tolerations: []
+  mlflowTrackingUri: http://mlflow.experiment-tracking.svc.cluster.local:5000
+  registeredModelName: recsys_bst_ranker
+  candidateTagKey: candidate
+  pendingValue: test
+  claimedValue: testing
+  testedValue: tested
+  controlManifestUri: s3://recsys-model-store/promotions/bst/latest.json
+  stableManifestUri: s3://recsys-model-store/promotions/bst/latest.json
+  jenkinsUrl: http://recsys-jenkins.ci.svc.cluster.local:8080
+  jenkinsJobName: RecSys-KServe-Model-CD
+  jenkinsAdminSecretName: recsys-jenkins-admin
+  prometheusUrl: http://recsys-prometheus.observability.svc.cluster.local:9090
+  gateWindow: 10m
+  minSamples: 100
+  autoProgressiveEnabled: true
+  progressiveWeights: "10,25,50"
+  stageMinObservationSeconds: 30
+  pollSeconds: 15
+  buildTimeoutSeconds: 1800
+  resources:
+    requests:
+      cpu: 25m
+      memory: 96Mi
+    limits:
+      cpu: 250m
+      memory: 512Mi
+
+rbac:
+  create: true
+  serviceAccountName: recsys-jenkins
+  clusterWide: true

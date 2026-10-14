@@ -1,0 +1,77 @@
+namespace:
+  create: false
+
+productionTarget:
+  enabled: true
+  projectId: owner-project
+  region: asia-southeast1
+  zone: asia-southeast1-b
+  cluster: recsys-mlops-gke
+  context: gke_owner-project_asia-southeast1-b_recsys-mlops-gke
+  imageRegistry: registry.example.invalid/recsys
+
+jenkins:
+  nodeSelector:
+    # Jenkins and its 11 GiB aggregate container limits require the larger
+    # production node. Keep this Helm-owned so an upgrade cannot undo the
+    # reviewed live placement with a stale cpu-services value.
+    recsys.ai/pool: ml-system
+  tolerations:
+    - key: recsys.ai/workload
+      operator: Equal
+      value: ml-system
+      effect: NoSchedule
+  resources:
+    requests:
+      cpu: 300m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      # Full KFP package compilation briefly peaks above 2 GiB while uv links
+      # the locked ML environment. Keep enough headroom to avoid cgroup
+      # allocation failures without increasing the scheduler reservation.
+      memory: 8Gi
+  runtimeCredentialsSecret:
+    enabled: true
+  dind:
+    # Reuse Jenkins home for Docker graph data so GKE provisions one CI disk.
+    # Full releases retain large Spark/Flink/ML layers alongside Jenkins metadata,
+    # so the production override keeps enough headroom for image assembly.
+    useJenkinsHomePvc: true
+    gc:
+      keepStorage: 40GB
+    resources:
+      requests:
+        cpu: 50m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 3Gi
+    pvc:
+      enabled: false
+      storage: 200Gi
+      storageClassName: standard-rwo
+  runtimeTools:
+    installOnStartup: true
+  webhookIngress:
+    enabled: true
+  pvc:
+    volumeName: ""
+    storage: 100Gi
+    storageClassName: standard
+
+modelRolloutWatcher:
+  enabled: true
+  # Keep the last verified immutable watcher image; the mutable `gcp` tag is
+  # not published in Artifact Registry and makes a CI-only Helm upgrade stall.
+  image: registry.example.invalid/recsys/recsys-mlops-training:a7ce4e4ec31e0fea5c1e4558c35012aee7b87cac
+  imagePullPolicy: Always
+  nodeSelector:
+    recsys.ai/pool: ml-system
+  tolerations:
+    - key: recsys.ai/workload
+      operator: Equal
+      value: ml-system
+      effect: NoSchedule
+  autoProgressiveEnabled: true
+  progressiveWeights: "10,25,50"

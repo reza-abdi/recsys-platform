@@ -1,0 +1,611 @@
+{{- if .Values.jenkins.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recsys-jenkins-init
+  namespace: {{ .Values.namespace.name }}
+data:
+  location.groovy: |
+    import jenkins.model.JenkinsLocationConfiguration
+    // Build URLs are required for rollout evidence and reconciliation. Keep a
+    // user-configured external URL; otherwise use the stable internal service.
+    def location = JenkinsLocationConfiguration.get()
+    if (!location.getUrl()) {
+      location.setUrl("{{ .Values.jenkins.runtimeCredentialsSecret.url }}/")
+      location.save()
+    }
+  basic-security.groovy: |
+    import hudson.security.FullControlOnceLoggedInAuthorizationStrategy
+    import hudson.security.HudsonPrivateSecurityRealm
+    import hudson.security.ProjectMatrixAuthorizationStrategy
+    import hudson.model.User
+    import jenkins.model.Jenkins
+    import org.jenkinsci.plugins.matrixauth.PermissionEntry
+    import org.jenkinsci.plugins.matrixauth.AuthorizationType
+
+    def instance = Jenkins.get()
+    def username = System.getenv("JENKINS_ADMIN_USER") ?: "admin"
+    def password = System.getenv("JENKINS_ADMIN_PASSWORD")
+
+    if (password?.trim()) {
+      def realm = new HudsonPrivateSecurityRealm(false)
+      // Reconcile the persisted Jenkins user with the Kubernetes Secret on
+      // every startup. Jenkins home survives pod replacement, so only
+      // creating a missing account leaves the Secret and stored password out
+      // of sync after a credential rotation or a restored PVC.
+      def admin = User.getById(username, true)
+      admin.addProperty(HudsonPrivateSecurityRealm.Details.fromPlainPassword(password))
+      admin.save()
+      instance.setSecurityRealm(realm)
+
+      // Preserve existing authenticated accounts when migrating the legacy
+      // all-users-admin strategy. Never reset a persisted scoped ACL on boot.
+      if (instance.authorizationStrategy instanceof FullControlOnceLoggedInAuthorizationStrategy) {
+        def strategy = new ProjectMatrixAuthorizationStrategy()
+        User.getAll().findAll { it.getProperty(HudsonPrivateSecurityRealm.Details) != null }.each {
+          strategy.add(Jenkins.ADMINISTER, new PermissionEntry(AuthorizationType.USER, it.id))
+        }
+        instance.setAuthorizationStrategy(strategy)
+      } else if (instance.authorizationStrategy == hudson.security.AuthorizationStrategy.UNSECURED) {
+        def strategy = new ProjectMatrixAuthorizationStrategy()
+        strategy.add(Jenkins.ADMINISTER, new PermissionEntry(AuthorizationType.USER, username))
+        instance.setAuthorizationStrategy(strategy)
+      }
+      instance.save()
+    }
+  {{- if .Values.jenkins.seedJob.enabled }}
+  seed-github-cicd-job.groovy: |
+    import java.io.ByteArrayInputStream
+    import java.io.StringReader
+    import java.nio.charset.StandardCharsets
+    import javax.xml.transform.stream.StreamSource
+    import jenkins.model.Jenkins
+
+    def instance = Jenkins.get()
+    def jobName = "{{ .Values.jenkins.seedJob.name }}"
+    def jobXml = new File("/var/jenkins_home/init.groovy.d/recsys-github-cicd.xml")
+
+    if (jobXml.exists()) {
+      def xml = jobXml.getText("UTF-8")
+      def existing = instance.getItem(jobName)
+      if (existing == null) {
+        instance.createProjectFromXML(jobName, new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)))
+      } else {
+        existing.updateByXml(new StreamSource(new StringReader(xml)))
+        existing.save()
+      }
+      instance.save()
+    }
+  recsys-github-cicd.xml: |
+    <?xml version='1.1' encoding='UTF-8'?>
+    <flow-definition plugin="workflow-job">
+      <actions/>
+      <description>GitHub webhook CI/CD entrypoint pinned to main. Every main commit publishes immutable images, deploys in dependency order, and verifies production.</description>
+      <keepDependencies>false</keepDependencies>
+      <properties>
+        <com.coravy.hudson.plugins.github.GithubProjectProperty plugin="github">
+          <projectUrl>{{ .Values.jenkins.github.projectUrl }}</projectUrl>
+          <displayName></displayName>
+        </com.coravy.hudson.plugins.github.GithubProjectProperty>
+        <org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+          <triggers>
+            <com.cloudbees.jenkins.GitHubPushTrigger plugin="github">
+              <spec></spec>
+            </com.cloudbees.jenkins.GitHubPushTrigger>
+          </triggers>
+        </org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+        <hudson.model.ParametersDefinitionProperty>
+          <parameterDefinitions>
+            <hudson.model.BooleanParameterDefinition>
+              <name>PUBLISH_IMAGES</name>
+              <defaultValue>true</defaultValue>
+            </hudson.model.BooleanParameterDefinition>
+            <hudson.model.BooleanParameterDefinition>
+              <name>FORCE_DEPLOY</name>
+              <defaultValue>false</defaultValue>
+            </hudson.model.BooleanParameterDefinition>
+            <hudson.model.BooleanParameterDefinition>
+              <name>DEPLOY_PULL_REQUESTS</name>
+              <defaultValue>false</defaultValue>
+            </hudson.model.BooleanParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>COVERAGE_MIN</name>
+              <defaultValue>90</defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>FORCE_COMPONENTS</name>
+              <defaultValue></defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+          </parameterDefinitions>
+        </hudson.model.ParametersDefinitionProperty>
+      </properties>
+      <definition class="org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition" plugin="workflow-cps">
+        <scm class="hudson.plugins.git.GitSCM" plugin="git">
+          <configVersion>2</configVersion>
+          <userRemoteConfigs>
+            <hudson.plugins.git.UserRemoteConfig>
+              <url>{{ .Values.jenkins.github.repositoryUrl }}</url>
+            </hudson.plugins.git.UserRemoteConfig>
+          </userRemoteConfigs>
+          <branches>
+            <hudson.plugins.git.BranchSpec>
+              <name>{{ .Values.jenkins.github.branchSpec }}</name>
+            </hudson.plugins.git.BranchSpec>
+          </branches>
+          <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+          <submoduleCfg class="empty-list"/>
+          <extensions/>
+        </scm>
+        <scriptPath>{{ .Values.jenkins.seedJob.scriptPath }}</scriptPath>
+        <lightweight>true</lightweight>
+      </definition>
+      <disabled>false</disabled>
+    </flow-definition>
+  zz-seed-cicd-views.groovy: |
+    import hudson.model.ListView
+    import java.io.ByteArrayInputStream
+    import java.io.StringReader
+    import java.nio.charset.StandardCharsets
+    import javax.xml.transform.stream.StreamSource
+    import jenkins.model.Jenkins
+
+    def instance = Jenkins.get()
+    def repositoryUrl = "{{ .Values.jenkins.github.repositoryUrl }}"
+    def branchSpec = "{{ .Values.jenkins.github.branchSpec }}"
+    def projectUrl = "{{ .Values.jenkins.github.projectUrl }}"
+    def scriptPath = "{{ .Values.jenkins.seedJob.scriptPath }}"
+    def mainJobName = "{{ .Values.jenkins.seedJob.name }}"
+    def mainBranchSpec = "*/main"
+
+    def xmlEscape = { value ->
+      (value ?: "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&apos;")
+    }
+
+    def scmPipelineXml = { jobName, description, forceComponents, forceDeploy, githubTrigger, jobScriptPath, scmBranchSpec ->
+      def triggerProperty = githubTrigger ? """<org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+          <triggers>
+            <com.cloudbees.jenkins.GitHubPushTrigger plugin="github">
+              <spec></spec>
+            </com.cloudbees.jenkins.GitHubPushTrigger>
+          </triggers>
+        </org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>""" : ""
+      return """<?xml version='1.1' encoding='UTF-8'?>
+    <flow-definition plugin="workflow-job">
+      <actions/>
+      <description>${xmlEscape(description)}</description>
+      <keepDependencies>false</keepDependencies>
+      <properties>
+        <com.coravy.hudson.plugins.github.GithubProjectProperty plugin="github">
+          <projectUrl>${xmlEscape(projectUrl)}</projectUrl>
+          <displayName></displayName>
+        </com.coravy.hudson.plugins.github.GithubProjectProperty>
+        ${triggerProperty}
+        <hudson.model.ParametersDefinitionProperty>
+          <parameterDefinitions>
+            <hudson.model.StringParameterDefinition>
+              <name>IMAGE_REGISTRY</name>
+              <defaultValue></defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.BooleanParameterDefinition>
+              <name>PUBLISH_IMAGES</name>
+              <defaultValue>true</defaultValue>
+            </hudson.model.BooleanParameterDefinition>
+            <hudson.model.BooleanParameterDefinition>
+              <name>FORCE_DEPLOY</name>
+              <defaultValue>${forceDeploy ? "true" : "false"}</defaultValue>
+            </hudson.model.BooleanParameterDefinition>
+            <hudson.model.BooleanParameterDefinition>
+              <name>DEPLOY_PULL_REQUESTS</name>
+              <defaultValue>false</defaultValue>
+            </hudson.model.BooleanParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>REGISTRY_CREDENTIALS_ID</name>
+              <defaultValue></defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>KUBECONFIG_CREDENTIALS_ID</name>
+              <defaultValue></defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>GATEWAY_SMOKE_CREDENTIALS_ID</name>
+              <defaultValue></defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>PROMOTION_MANIFEST_URI</name>
+              <defaultValue>s3://recsys-model-store/promotions/bst/latest.json</defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>AGENTIC_SMOKE_CHUNK_ID</name>
+              <defaultValue>800080:review:rev_800080_02:0</defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>COMPONENT_CI_MAX_PARALLEL</name>
+              <defaultValue>2</defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>COVERAGE_MIN</name>
+              <defaultValue>90</defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>FORCE_COMPONENTS</name>
+              <defaultValue>${xmlEscape(forceComponents)}</defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+          </parameterDefinitions>
+        </hudson.model.ParametersDefinitionProperty>
+      </properties>
+      <definition class="org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition" plugin="workflow-cps">
+        <scm class="hudson.plugins.git.GitSCM" plugin="git">
+          <configVersion>2</configVersion>
+          <userRemoteConfigs>
+            <hudson.plugins.git.UserRemoteConfig>
+              <url>${xmlEscape(repositoryUrl)}</url>
+            </hudson.plugins.git.UserRemoteConfig>
+          </userRemoteConfigs>
+          <branches>
+            <hudson.plugins.git.BranchSpec>
+              <name>${xmlEscape(scmBranchSpec)}</name>
+            </hudson.plugins.git.BranchSpec>
+          </branches>
+          <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+          <submoduleCfg class="empty-list"/>
+          <extensions/>
+        </scm>
+        <scriptPath>${xmlEscape(jobScriptPath)}</scriptPath>
+        <lightweight>true</lightweight>
+      </definition>
+      <disabled>false</disabled>
+    </flow-definition>"""
+    }
+
+    def kserveModelCdXml = { jobName, description ->
+      return """<?xml version='1.1' encoding='UTF-8'?>
+    <flow-definition plugin="workflow-job">
+      <actions/>
+      <description>${xmlEscape(description)}</description>
+      <keepDependencies>false</keepDependencies>
+      <properties>
+        <com.coravy.hudson.plugins.github.GithubProjectProperty plugin="github">
+          <projectUrl>${xmlEscape(projectUrl)}</projectUrl>
+          <displayName></displayName>
+        </com.coravy.hudson.plugins.github.GithubProjectProperty>
+        <hudson.model.ParametersDefinitionProperty>
+          <parameterDefinitions>
+            <hudson.model.StringParameterDefinition>
+              <name>ROLLOUT_STAGE</name>
+              <defaultValue>deploy</defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>PROMOTION_MANIFEST_URI</name>
+              <defaultValue>s3://recsys-model-store/promotions/bst/latest.json</defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>CONTROL_MANIFEST_URI</name>
+              <defaultValue></defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>CANDIDATE_MANIFEST_URI</name>
+              <defaultValue></defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>AB_EXPERIMENT_ID</name>
+              <defaultValue></defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>AB_CANDIDATE_WEIGHT_PERCENT</name>
+              <defaultValue>10</defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>PROMETHEUS_URL</name>
+              <defaultValue>http://recsys-prometheus.observability.svc.cluster.local:9090</defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>AB_GATE_WINDOW</name>
+              <defaultValue>10m</defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>AB_MIN_SAMPLES</name>
+              <defaultValue>100</defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>COMPONENT_DEPLOY_TIMEOUT</name>
+              <defaultValue>600s</defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>MODEL_VERSION</name>
+              <defaultValue></defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>METRIC_NAME</name>
+              <defaultValue></defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>METRIC_VALUE</name>
+              <defaultValue></defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+              <name>TRIGGER_SOURCE</name>
+              <defaultValue>manual</defaultValue>
+              <trim>true</trim>
+            </hudson.model.StringParameterDefinition>
+          </parameterDefinitions>
+        </hudson.model.ParametersDefinitionProperty>
+      </properties>
+      <definition class="org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition" plugin="workflow-cps">
+        <scm class="hudson.plugins.git.GitSCM" plugin="git">
+          <configVersion>2</configVersion>
+          <userRemoteConfigs>
+            <hudson.plugins.git.UserRemoteConfig>
+              <url>${xmlEscape(repositoryUrl)}</url>
+            </hudson.plugins.git.UserRemoteConfig>
+          </userRemoteConfigs>
+          <branches>
+            <hudson.plugins.git.BranchSpec>
+              <name>${xmlEscape(mainBranchSpec)}</name>
+            </hudson.plugins.git.BranchSpec>
+          </branches>
+          <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+          <submoduleCfg class="empty-list"/>
+          <extensions/>
+        </scm>
+        <scriptPath>jenkins/KServeModelCD.Jenkinsfile</scriptPath>
+        <lightweight>true</lightweight>
+      </definition>
+      <triggers/>
+      <disabled>false</disabled>
+    </flow-definition>"""
+    }
+
+    def upsertJob = { name, xml ->
+      def existing = instance.getItem(name)
+      if (existing == null) {
+        instance.createProjectFromXML(name, new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)))
+      } else {
+        existing.updateByXml(new StreamSource(new StringReader(xml)))
+        existing.save()
+      }
+    }
+
+    def kserveCdJobName = "RecSys-KServe-Model-CD"
+    def llmAgentCdJobName = "RecSys-LLM-Agent-CD"
+    def llmOnboardJobName = "RecSys-LLM-Candidate-Onboard"
+    def ragJobName = "RecSys-RAG-Data-Pipeline-CICD"
+    def contextAgentJobName = "RecSys-Context-Agent-CICD"
+    def recommendationAgentJobName = "RecSys-Recommendation-Agent-CICD"
+    def coordinatorAgentJobName = "RecSys-Coordinator-Agent-CICD"
+
+    def mainDescription = "GitHub webhook CI/CD entrypoint pinned to main. Every main commit publishes Git-SHA images, deploys the dependency-ordered release, and verifies production."
+    upsertJob(mainJobName, scmPipelineXml(mainJobName, mainDescription, "", false, true, scriptPath, branchSpec))
+
+    upsertJob(
+      ragJobName,
+      scmPipelineXml(
+        ragJobName,
+        "Dedicated RAG data pipeline CI/CD proof: RAG index and retrieval API tests, immutable image publish, Milvus/Feast deployment, blue-green index promotion, retrieval verification, and rollback evidence.",
+        "rag_index,rag_api,ci_config",
+        true,
+        false,
+        scriptPath,
+        mainBranchSpec
+      )
+    )
+
+    upsertJob(
+      contextAgentJobName,
+      scmPipelineXml(
+        contextAgentJobName,
+        "Dedicated Context Agent CI/CD proof: Feature/RAG MCP tests and image publish, Context SandboxAgent deployment, MCP/A2A verification, autoscaling checks, and Agent Registry publication.",
+        "feature_rag_mcp,context_agent,ci_config",
+        true,
+        false,
+        scriptPath,
+        mainBranchSpec
+      )
+    )
+
+    upsertJob(
+      recommendationAgentJobName,
+      scmPipelineXml(
+        recommendationAgentJobName,
+        "Dedicated Recommendation Agent CI/CD proof: Recommendation MCP tests and image publish, Recommendation SandboxAgent deployment, MCP/A2A verification, autoscaling checks, and Agent Registry publication.",
+        "recommendation_mcp,recommendation_agent,ci_config",
+        true,
+        false,
+        scriptPath,
+        mainBranchSpec
+      )
+    )
+
+    upsertJob(
+      coordinatorAgentJobName,
+      scmPipelineXml(
+        coordinatorAgentJobName,
+        "Dedicated Coordinator Agent dependency-closed CI/CD proof: both specialist MCPs and agents, Coordinator routing deployment, six-case A2A verification, and same-commit Agent Registry publication.",
+        "feature_rag_mcp,context_agent,recommendation_mcp,recommendation_agent,coordinator_agent,ci_config",
+        true,
+        false,
+        scriptPath,
+        mainBranchSpec
+      )
+    )
+
+    upsertJob(
+      kserveCdJobName,
+      kserveModelCdXml(
+        kserveCdJobName,
+        "Post-promotion KServe model CD loaded from jenkins/KServeModelCD.Jenkinsfile in SCM. The rollout watcher triggers this job after candidate selection; every build checks out the current main revision before applying the requested shadow, A/B, promote, or rollback stage."
+      )
+    )
+
+    def llmAgentCdXml = kserveModelCdXml(llmAgentCdJobName, "Immutable config/LLM A/B delivery: Istio traffic shifting, 20 functional cases, champion promotion and rollback.")
+      .replace("jenkins/KServeModelCD.Jenkinsfile", "jenkins/LLMAgentCD.Jenkinsfile")
+    def llmDefaults = [
+      ACTION: "resume", EXPERIMENT_TYPE: "config_only", EXPERIMENT_ID: "", CANDIDATE_MANIFEST: "",
+      STATE_URI: "s3://recsys-model-store/llm-agent-cd/recommendation/state.json", ROUTER_IMAGE: "",
+      POLICY: "configs/llm-ab/policy.json", FIXTURES: "configs/llm-ab/cases.json"
+    ]
+    def llmParameters = "<parameterDefinitions>" + llmDefaults.collect { key, value ->
+      "<hudson.model.StringParameterDefinition><name>${xmlEscape(key)}</name><defaultValue>${xmlEscape(value)}</defaultValue><trim>true</trim></hudson.model.StringParameterDefinition>"
+    }.join("") + "</parameterDefinitions>"
+    llmAgentCdXml = llmAgentCdXml.replaceAll("(?s)<parameterDefinitions>.*?</parameterDefinitions>", java.util.regex.Matcher.quoteReplacement(llmParameters))
+    upsertJob(llmAgentCdJobName, llmAgentCdXml)
+
+    def llmOnboardXml = kserveModelCdXml(
+      llmOnboardJobName,
+      "Generic GGUF candidate onboarding: pinned artifact attestation, zero-traffic preparation, native tool compatibility and reviewed alias publication."
+    ).replace("jenkins/KServeModelCD.Jenkinsfile", "jenkins/LLMCandidateOnboard.Jenkinsfile")
+    def llmOnboardDefaults = [
+      ACTION: "prepare", ONBOARDING_ID: "", INTENT_URI: "", ROUTER_IMAGE: ""
+    ]
+    def llmOnboardParameters = "<parameterDefinitions>" + llmOnboardDefaults.collect { key, value ->
+      "<hudson.model.StringParameterDefinition><name>${xmlEscape(key)}</name><defaultValue>${xmlEscape(value)}</defaultValue><trim>true</trim></hudson.model.StringParameterDefinition>"
+    }.join("") + "</parameterDefinitions>"
+    llmOnboardXml = llmOnboardXml.replaceAll(
+      "(?s)<parameterDefinitions>.*?</parameterDefinitions>",
+      java.util.regex.Matcher.quoteReplacement(llmOnboardParameters)
+    )
+    upsertJob(llmOnboardJobName, llmOnboardXml)
+
+    def resetListView = { viewName, description, jobNames, primary ->
+      def view = instance.getView(viewName)
+      if (view != null && !(view instanceof ListView)) {
+        instance.deleteView(view)
+        view = null
+      }
+      if (view == null) {
+        view = new ListView(viewName)
+        instance.addView(view)
+      }
+      view.description = description
+      view.getItems().toList().each { item ->
+        view.remove(item)
+      }
+      jobNames.each { jobName ->
+        def item = instance.getItem(jobName)
+        if (item != null) {
+          view.add(item)
+        }
+      }
+      view.save()
+      if (primary) {
+        instance.setPrimaryView(view)
+      }
+    }
+
+    resetListView(
+      "00 Main Auto Deploy",
+      "Main RecSys CI/CD view. Main commits publish immutable images, deploy, and verify production.",
+      [mainJobName],
+      true
+    )
+
+    resetListView(
+      "01 RAG Data Pipeline",
+      "RAG index and retrieval API CI/CD: test, build, publish, Milvus/Feast deployment, blue-green promotion, verification and rollback evidence.",
+      [ragJobName],
+      false
+    )
+
+    resetListView(
+      "02 Context Agent",
+      "Context Agent CI/CD: Feature/RAG MCP, SandboxAgent, WorkerPool, A2A smoke, autoscaling and registry publication.",
+      [contextAgentJobName],
+      false
+    )
+
+    resetListView(
+      "03 Recommendation Agent",
+      "Recommendation Agent CI/CD: Recommendation MCP, SandboxAgent, WorkerPool, A2A smoke, autoscaling and registry publication.",
+      [recommendationAgentJobName],
+      false
+    )
+
+    resetListView(
+      "04 Coordinator Agent",
+      "Coordinator dependency-closed CI/CD: both specialists and MCPs, routing verification, partial-result behavior and registry dependency proof.",
+      [coordinatorAgentJobName],
+      false
+    )
+
+    resetListView(
+      "06A KServe Model CD",
+      "Auto/manual CD view for promoted BST models. Kubeflow triggers RecSys-KServe-Model-CD after promotion when metric score >= threshold, and this job deploys the promoted Triton repository to KServe.",
+      [kserveCdJobName, llmAgentCdJobName, llmOnboardJobName],
+      false
+    )
+
+    [
+      "RecSys-Materialize-CICD",
+      "RecSys-Training-CICD",
+      "RecSys-DP1-Raw-To-Bronze-CICD",
+      "RecSys-DP2-Bronze-To-Silver-Gold-CICD",
+      "RecSys-DP3-Offline-Feature-Table-CICD",
+      "RecSys-Triton-KServe-CICD",
+      "RecSys-Progressive-Rollout-CICD",
+      "RecSys-FastAPI-CICD",
+      "RecSys-Stream-Offline-Store-CICD",
+      "RecSys-Stream-Online-Store-CICD",
+      "RecSys-Recommendation-Web-CICD",
+      "RecSys-Analytics-BI-CICD",
+      "RecSys-Recommendation-Web-Rollback",
+      "RecSys-Post-Deploy-E2E",
+    ].each { retiredJobName ->
+      def retiredJob = instance.getItem(retiredJobName)
+      if (retiredJob != null) {
+        instance.deleteItem(retiredJob)
+        println("Deleted retired Jenkins job ${retiredJobName}")
+      }
+    }
+
+    [
+      "01 Materialize Pipeline",
+      "02 Training Pipeline",
+      "03 Data Pipeline 1",
+      "04 Data Pipeline 2",
+      "05 Data Pipeline 3",
+      "06 Triton Inference Engine",
+      "06B Progressive Model Rollout",
+      "07 FastAPI Services",
+      "08 Streaming Offline Store",
+      "09 Streaming Online Store",
+      "10 Recommendation Web App",
+      "11 Analytics And BI",
+      "99 All Component CI/CD",
+    ].each { retiredViewName ->
+      def retiredView = instance.getView(retiredViewName)
+      if (retiredView != null) {
+        instance.deleteView(retiredView)
+      }
+    }
+
+    instance.save()
+  {{- end }}
+{{- end }}
