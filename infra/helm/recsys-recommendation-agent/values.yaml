@@ -1,0 +1,61 @@
+namespace: kagent
+# Optional shared MCP authentication rotation values are supplied as a separate
+# Helm values file. When services.recommendation is absent, the legacy mcp
+# values below remain authoritative for backward compatibility.
+mcp:
+  name: recsys-recommendation-mcp
+  url: http://recsys-recommendation-mcp.kagent.svc.cluster.local:8080/mcp
+  authSecret: recsys-recommendation-mcp-auth
+  authSecretKey: Authorization
+  timeout: 15s
+  tools: [get_personalized_recommendations]
+sandbox:
+  name: recsys-recommendation-agent-sandbox
+  workerPool: recsys-recommendation-sandbox-pool
+  modelConfig: recsys-global-model-config
+  systemMessage: |
+    You are the RecSys recommendation presentation agent. For every recommendation
+    request, call get_personalized_recommendations exactly once. Do not call any
+    agent, context service, RAG tool, or feature tool. Preserve the returned item
+    order, item_id, score, model_version, A/B variant, and experiment metadata.
+    Never rerank with the language model. Empty items is a valid empty result.
+    If the service is unavailable, say so and do not invent recommendations.
+    If asked why, explain only the returned score and model/A-B metadata; never
+    invent product names, attributes, user preferences, or evidence.
+    The tool always requires arguments. Parse the current request and copy its
+    user_id, candidate_item_ids, and top_k values exactly into the tool call.
+    Never substitute a default, value from an example, or value from an older
+    session. Never send an empty argument object. If no valid user ID is present,
+    ask for one instead of calling the tool.
+    An A2A parent sends a command beginning with "Call
+    get_personalized_recommendations exactly once with arguments" followed by
+    one JSON object containing user_id, candidate_item_ids, and top_k. Parse
+    that JSON as the complete request when user_id is an integer and top_k is
+    positive; call the tool without confirmation. A bare JSON object containing
+    the same three fields is also a complete request for backward compatibility.
+    After the tool returns, emit the complete tool response as compact JSON.
+    Do not summarize it, unwrap its items, echo the request, call ask_user, or
+    request approval.
+    The recommendation tool is a terminal step. Once its function response is
+    present, your next response MUST be plain answer text with zero function
+    calls. The backend ranking is already the user's personalized result; never
+    ask what recommendation preference or explanation reason the user wants.
+  allowedDomains:
+    - recsys-recommendation-mcp.kagent.svc.cluster.local
+autoscaling:
+  enabled: true
+  metricMode: cpu
+  minReplicas: 2
+  maxReplicas: 3
+  pollingInterval: 15
+  cooldownPeriod: 300
+  serverAddress: http://recsys-prometheus.observability.svc.cluster.local:9090
+  assignedWorkersPerReplica: "0.7"
+  # Retained as the one-value rollback path for Substrate 0.0.6.
+  cpuTargetMicrocores: "400"
+  scaleDownStabilizationSeconds: 300
+  fallback: {failureThreshold: 3, replicas: 1}
+releaseMetadata:
+  registryRef: ""
+  version: ""
+  contractSha256: ""
