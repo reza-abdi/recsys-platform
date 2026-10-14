@@ -1,0 +1,44 @@
+frontend:
+  image: registry.example.invalid/recsys/recsys-demo-web:gcp
+  imagePullPolicy: Always
+  replicas: 2
+  nodeSelector:
+    recsys.ai/pool: ml-system
+    recsys.ai/workload: ml-system
+  tolerations:
+    - key: recsys.ai/workload
+      operator: Equal
+      value: ml-system
+      effect: NoSchedule
+
+backend:
+  image: registry.example.invalid/recsys/recsys-demo-api:gcp
+  imagePullPolicy: Always
+  replicas: 2
+  nodeSelector:
+    recsys.ai/pool: ml-system
+    recsys.ai/workload: ml-system
+  tolerations:
+    - key: recsys.ai/workload
+      operator: Equal
+      value: ml-system
+      effect: NoSchedule
+
+podDisruptionBudget:
+  enabled: true
+
+topologySpread:
+  enabled: true
+
+ingress:
+  host: recsys-mlops.site
+  serviceUpstream: true
+  tls:
+    enabled: true
+    clusterIssuerName: letsencrypt-prod
+
+serviceMonitor:
+  enabled: false
+
+podMonitoring:
+  enabled: true
