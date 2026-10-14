@@ -1,0 +1,80 @@
+namespace: analytics
+
+secrets:
+  create: true
+
+externalSecret:
+  enabled: false
+  storeName: recsys-vault
+  remoteKey: analytics
+  refreshInterval: 1h
+
+images:
+  trino: trinodb/trino:482
+  superset: registry.example.invalid/recsys/recsys-analytics-superset:required
+  dbt: registry.example.invalid/recsys/recsys-analytics-dbt:required
+  sparkAnalytics: registry.example.invalid/recsys/recsys-spark-analytics:required
+  datahubOps: registry.example.invalid/recsys/recsys-datahub-ops:required
+  postgres: postgres:16-alpine
+  redis: redis:7.4-alpine
+  pullPolicy: IfNotPresent
+
+catalog:
+  database: iceberg_catalog
+  user: iceberg
+  password: ""
+  warehouse: s3://recsys-lakehouse/analytics
+  storage: 5Gi
+  storageClassName: standard
+
+superset:
+  database: superset
+  databaseUser: superset
+  databasePassword: ""
+  secretKey: ""
+  adminUser: admin
+  adminPassword: ""
+  storage: 5Gi
+  storageClassName: standard
+
+dashboardBootstrap:
+  enabled: true
+
+objectStorage:
+  endpoint: http://data-platform-minio.recsys-dataflow.svc.cluster.local:9000
+  region: us-east-1
+  accessKey: minio
+  secretKey: ""
+airflow:
+  namespace: recsys-dataflow
+  serviceAccount: default
+  schedule: "30 2 * * *"
+
+lakehouseThrift:
+  enabled: true
+  name: recsys-lakehouse-thrift
+  port: 10000
+  localThreads: 2
+  driverMemory: 2g
+
+nodeSelector:
+  recsys.ai/pool: cpu-services
+
+nodeSelectors:
+  lakehouseThrift:
+    recsys.ai/pool: cpu-services
+  trino:
+    recsys.ai/pool: cpu-services
+  supersetDashboardBootstrap:
+    recsys.ai/pool: cpu-services
+
+resources:
+  lakehouseThrift:
+    requests: {cpu: 250m, memory: 1Gi}
+    limits: {cpu: "2", memory: 3Gi}
+  trino:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {cpu: "2", memory: 3Gi}
+  superset:
+    requests: {cpu: 200m, memory: 256Mi}
+    limits: {cpu: "1", memory: 1Gi}

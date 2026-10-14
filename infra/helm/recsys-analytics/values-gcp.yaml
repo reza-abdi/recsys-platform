@@ -1,0 +1,9 @@
+nodeSelectors:
+  # These CPU-only query services do not tolerate the dedicated ML taint. Keep
+  # them with the stateful analytics services on the untainted CPU pool.
+  lakehouseThrift:
+    recsys.ai/pool: cpu-services
+  trino:
+    recsys.ai/pool: cpu-services
+  supersetDashboardBootstrap:
+    recsys.ai/pool: cpu-services
