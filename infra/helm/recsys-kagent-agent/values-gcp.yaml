@@ -1,0 +1,12 @@
+autoscaling:
+  # Keep two idle gVisor workers and scale to at most three on the quota-capped
+  # two-node production cluster.
+  minReplicas: 2
+  maxReplicas: 3
+  metricMode: assignedWorkers
+  assignedWorkersPerReplica: "0.7"
+  # Retained for a values-only rollback to the Substrate 0.0.6 baseline.
+  cpuTargetMicrocores: "200"
+  fallback:
+    failureThreshold: 3
+    replicas: 1
