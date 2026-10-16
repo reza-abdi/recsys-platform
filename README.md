@@ -1,0 +1,387 @@
+# End-to-End E-commerce Recommendation Platform
+
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+
+A **production-style, end-to-end recommendation platform** for data engineering, machine learning, deployment, serving, governance, and observability workflows on Kubernetes.
+
+## 🛍️ Business Domain
+
+This project is an end-to-end recommendation platform for e-commerce. It turns catalog, user, session, impression, behavior, and order data into batch and real-time features, trains a Behavior Sequence Transformer (BST), and serves personalized Top-K product recommendations through a production-style MLOps workflow.
+
+---
+
+## 📝 System Overview
+
+- **Data platform:** PostgreSQL and MinIO events flow through Debezium/Kafka CDC into Spark/Iceberg batch and Flink streaming pipelines. Airflow orchestrates ingestion and quality workflows; Feast serves PostgreSQL offline and Redis online features; Hudi, DataHub, Trino, dbt, Superset, and Evidently provide versioning, governance, analytics, and drift monitoring.
+
+- **ML platform:** A PyTorch Behavior Sequence Transformer is trained with Kubeflow and Ray Tune, tracked and versioned in MLflow/MinIO, then served through FastAPI, Feast, KServe, and Triton. Offline, drift, and online gates drive retraining, autoscaling, shadow deployment, sticky A/B rollout, promotion, and rollback.
+
+- **LLM and agent platform:** The RAG pipeline publishes semantic chunks and embeddings to Feast/Milvus, while llama.cpp models are served through llm-d and Agent Gateway. kagent SandboxAgents run on Agent Substrate, coordinate Context and Recommendation specialists through A2A, access authenticated MCP services, and use shared ModelConfig, Agent Registry, and champion/candidate delivery workflows.
+
+- **Web experience:** A React, TypeScript, and Vite storefront backed by FastAPI exercises the complete real-time recommendation path from user events to ranked Top-K results. Helm releases the frontend and backend atomically with ingress, health, scaling, and rollback controls.
+
+- **Platform operations:** Terraform, Helm, and Jenkins provision GCP/GKE and automate validation, immutable releases, deployment, and recovery. Vault, External Secrets, Istio, and NetworkPolicies secure workloads; Prometheus/Grafana, Loki, Tempo/OpenTelemetry, and Langfuse provide metrics, logs, traces, and LLM observability.
+
+---
+
+## 🎬 Recommendation Web Demo
+
+The demo shows the production web flow from user interactions and streaming feature updates through personalized recommendation serving.
+
+[![Recommendation Web Demo](docs/pngs/web_demo.gif)](docs/pngs/web_demo.mp4)
+
+---
+
+## 📚 Table of Contents
+
+1. [🛍️ Business Domain](#-business-domain)
+2. [📝 System Overview](#-system-overview)
+3. [🎬 Recommendation Web Demo](#-recommendation-web-demo)
+4. [🏗️ Architecture](#-architecture)
+   - [ML Overall System Flow](#ml-overall-system-flow)
+   - [LLM Overall System Flow](#llm-overall-system-flow)
+   - [Serving Pipeline High-Level Architecture](#serving-pipeline-high-level-architecture)
+   - [Progressive A/B Testing and Automatic Rollback](#progressive-ab-testing-and-automatic-rollback)
+   - [Data Platform Pipeline](#data-platform-pipeline)
+   - [Ranking Sequence Model Architecture](#ranking-sequence-model-architecture)
+5. [📁 Repository Main Folder Structure](#-repository-main-folder-structure)
+6. [📖 Code Documentation Standards](#-code-documentation-standards)
+7. [🗂️ Coursework Documentation](#-coursework-documentation)
+
+---
+
+## 🏗️ Architecture
+
+### ML Overall System Flow
+
+The following diagram presents the **End-to-End ML Platform**. Its core data, training, and serving flows are documented in the [high-level system design](<docs/submission/rubic-final-coursework-(final-ml)/high_level_system_design.md>), [online feature API](<docs/submission/rubic-final-coursework-(final-ml)/web-api-pull-data.md>), [model prediction API](<docs/submission/rubic-final-coursework-(final-ml)/web-api-model-prediction.md>), [feature store](<docs/submission/rubic-final-coursework-(final-ml)/feature_store.md>), [ML implementation](<docs/submission/rubic-final-coursework-(final-ml)/ml.md>), [ML pipelines](<docs/submission/rubic-final-coursework-(final-ml)/ml_pipelines.md>), and [versioning](<docs/submission/rubic-final-coursework-(final-ml)/versioning.md>). Platform delivery and governance are covered by [autoscaling](<docs/submission/rubic-final-coursework-(final-ml)/autoscale.md>), [CI/CD](<docs/submission/rubic-final-coursework-(final-ml)/ci_cd.md>), [routing and gateway](<docs/submission/rubic-final-coursework-(final-ml)/routing_gateway.md>), [infrastructure as code](<docs/submission/rubic-final-coursework-(final-ml)/iac.md>), [security](<docs/submission/rubic-final-coursework-(final-ml)/security.md>), [observability and drift detection](<docs/submission/rubic-final-coursework-(final-ml)/observability.md>), [A/B testing](<docs/submission/rubic-final-coursework-(final-ml)/ab_testing.md>), and [novel ideas](<docs/submission/rubic-final-coursework-(final-ml)/noval_ideas.md>).
+
+![End-to-End Recommendation Platform Architecture](docs/pngs/overview.png)
+
+### LLM Overall System Flow
+
+The following diagram presents the **End-to-End LLM Platform**. Its core runtime components are documented in [LLM inference](<docs/submission/rubric-final-coursework-(final-llm)/llm_inference_platform.md>), [global model configuration](<docs/submission/rubric-final-coursework-(final-llm)/global_model_config.md>), [RAG](<docs/submission/rubric-final-coursework-(final-llm)/rag.md>), [data-retrieval agents](<docs/submission/rubric-final-coursework-(final-llm)/agent_pull_data.md>), [recommendation agents](<docs/submission/rubric-final-coursework-(final-llm)/agent_recommendation_servicce.md>), [agent coordination](<docs/submission/rubric-final-coursework-(final-llm)/agent_coordinator.md>), and the [Agent Registry](<docs/submission/rubric-final-coursework-(final-llm)/agent_registry.md>). Platform delivery and governance are covered by [CI/CD](<docs/submission/rubric-final-coursework-(final-llm)/ci_cd.md>), [routing and gateway](<docs/submission/rubric-final-coursework-(final-llm)/routing_gateway.md>), [infrastructure as code](<docs/submission/rubric-final-coursework-(final-llm)/iac.md>), [security](<docs/submission/rubric-final-coursework-(final-llm)/security.md>), [observability](<docs/submission/rubric-final-coursework-(final-llm)/observability.md>), [A/B testing](<docs/submission/rubric-final-coursework-(final-llm)/a_b.md>), and [novel ideas](<docs/submission/rubric-final-coursework-(final-llm)/noval_ideas.md>).
+
+![End-to-End LLM Platform Architecture](docs/pngs/final_llm_4k.png)
+
+### Serving Pipeline High-Level Architecture
+
+The serving module retrieves fresh online features, routes stable, candidate, or shadow traffic, scores candidates with KServe/Triton, and returns Top-K recommendations.
+
+```mermaid
+flowchart LR
+  subgraph UX2["User / Client"]
+    direction TB
+    EndUser2["End User"]
+    Client2["Client Application"]
+    EndUser2 --> Client2
+  end
+
+  subgraph API2["API Serving"]
+    direction TB
+    Gateway2["NGINX HTTPS Gateway"]
+    RecAPI2["Recommendation FastAPI"]
+    FeatureAPI2["Online Feature FastAPI"]
+    Router2{"Stable / A-B / Shadow Router"}
+
+    Gateway2 --> RecAPI2
+    RecAPI2 --> FeatureAPI2 --> RecAPI2
+    RecAPI2 --> Router2
+  end
+
+  subgraph FS2["Online Feature Store"]
+    direction TB
+    Redis2[("Feast Online Store / Redis<br/>user, item and candidate features")]
+  end
+
+  FeatureAPI2 -->|Feast SDK get_online_features| Redis2
+  Redis2 -->|online features| FeatureAPI2
+
+  subgraph MS2["Model Serving"]
+    direction TB
+    Stable2["Stable KServe + Triton"]
+    Candidate2["Candidate KServe + Triton"]
+    Scores2["Candidate Scores"]
+    TopK2["Top-K Ranking"]
+    Response2["Recommendation Response<br/>items + model + experiment metadata"]
+
+    Stable2 --> Scores2
+    Candidate2 --> Scores2
+    Scores2 --> TopK2 --> Response2
+  end
+
+  Router2 -->|control| Stable2
+  Router2 -->|candidate| Candidate2
+  Router2 -.->|shadow copy| Candidate2
+
+  Client2 -->|recommendation request| Gateway2
+  Response2 -->|recommendations| Client2
+  Client2 --> EndUser2
+
+  subgraph MD2["Model Delivery"]
+    direction TB
+    ModelStore2[("Versioned Model Store")]
+    ModelCD2["Jenkins Model CD<br/>shadow, A/B, promote, fallback"]
+    ModelStore2 --> ModelCD2
+  end
+  ModelCD2 -.-> Stable2
+  ModelCD2 -.-> Candidate2
+
+  subgraph OBS2["Serving Observability"]
+    direction TB
+    Prometheus2["Prometheus Metrics"]
+    Loki2["Promtail + Loki Logs"]
+    OTel2["OpenTelemetry OTLP"]
+    Tempo2["Tempo Traces"]
+    Grafana2["Grafana Dashboards"]
+
+    Prometheus2 --> Grafana2
+    Loki2 --> Grafana2
+    OTel2 --> Tempo2 --> Grafana2
+  end
+  RecAPI2 -.-> Prometheus2
+  RecAPI2 -.-> Loki2
+  RecAPI2 -.-> OTel2
+  FeatureAPI2 -.-> Prometheus2
+  FeatureAPI2 -.-> Loki2
+  FeatureAPI2 -.-> OTel2
+  Stable2 -.-> Prometheus2
+  Candidate2 -.-> Prometheus2
+
+  classDef edge fill:#fff3e0,stroke:#ef6c00,color:#4e342e;
+  classDef service fill:#e3f2fd,stroke:#1976d2,color:#0d47a1;
+  classDef store fill:#e8f5e9,stroke:#388e3c,color:#1b5e20;
+  classDef model fill:#f3e5f5,stroke:#7b1fa2,color:#4a148c;
+  classDef result fill:#fce4ec,stroke:#c2185b,color:#880e4f;
+
+  class EndUser2,Client2,Gateway2 edge;
+  class RecAPI2,FeatureAPI2,ModelCD2 service;
+  class Redis2,ModelStore2 store;
+  class Router2,Stable2,Candidate2 model;
+  class Scores2,TopK2,Response2,Prometheus2,Loki2,OTel2,Tempo2,Grafana2 result;
+```
+
+### Progressive A/B Testing and Automatic Rollback
+
+The model-delivery controller turns an MLflow candidate into a shadow deployment, then progressively exposes sticky user traffic at **10% → 25% → 50%**. At every step, Jenkins evaluates fresh control/candidate samples from Prometheus; a regression immediately restores champion-only traffic, while a final pass promotes the candidate and removes the temporary Triton service. See [A/B testing](<docs/submission/rubic-final-coursework-(final-ml)/ab_testing.md>) and [progressive rollout details](<docs/submission/rubic-final-coursework-(final-ml)/noval_ideas.md>).
+
+```mermaid
+flowchart TD
+  Candidate["Kubeflow registers versioned model<br/>MLflow candidate = test"] --> Watcher["Rollout watcher claims candidate<br/>and triggers Jenkins Model CD"]
+  Watcher --> Shadow["Deploy candidate KServe/Triton<br/>shadow traffic, user response from champion"]
+  Shadow --> ShadowGate{"Candidate Ready and<br/>shadow health gates pass?"}
+
+  ShadowGate -->|No| Rollback["Automatic rollback<br/>A/B weight = 0, shadow disabled"]
+  ShadowGate -->|Yes| AB10["Sticky A/B rollout<br/>candidate weight = 10%"]
+
+  AB10 --> Samples["Collect fresh control/candidate samples<br/>Prometheus + Grafana"]
+  AB25["Increase candidate weight to 25%"] --> Samples
+  AB50["Increase candidate weight to 50%"] --> Samples
+  Samples --> SampleGate{"At least 100 fresh samples<br/>for both variants?"}
+  SampleGate -->|No: HOLD| Samples
+  SampleGate -->|Yes| OnlineGate{"Online gates pass?<br/>error delta <= 0.02<br/>p95 latency <= 1.5x control<br/>confidence >= 0.95x control"}
+
+  OnlineGate -->|Fail| Rollback
+  OnlineGate -->|Pass at 10%| AB25
+  OnlineGate -->|Pass at 25%| AB50
+  OnlineGate -->|Pass at 50%| Promote["Promote candidate<br/>update stable manifest and MLflow champion"]
+
+  Rollback --> Stable["Delete candidate Triton<br/>serve previous champion only"]
+  Promote --> NewStable["Delete temporary candidate Triton<br/>serve new champion only"]
+
+  classDef control fill:#e3f2fd,stroke:#1976d2,color:#0d47a1;
+  classDef candidate fill:#fff3e0,stroke:#ef6c00,color:#4e342e;
+  classDef decision fill:#fff8e1,stroke:#f9a825,color:#5d4037;
+  classDef safe fill:#e8f5e9,stroke:#388e3c,color:#1b5e20;
+  classDef rollback fill:#ffebee,stroke:#c62828,color:#b71c1c;
+
+  class Candidate,Watcher control;
+  class Shadow,AB10,AB25,AB50,Samples candidate;
+  class ShadowGate,SampleGate,OnlineGate decision;
+  class Promote,Stable,NewStable safe;
+  class Rollback rollback;
+```
+
+### Data Platform Pipeline
+
+The data platform combines batch and CDC ingestion, Spark and Flink processing, Airflow orchestration, local data-quality checks, static DataHub batch-dataset lineage, and Feast offline/online feature stores.
+
+```mermaid
+flowchart LR
+  subgraph Sources["Source Simulation"]
+    Generator["Historical + Realtime<br/>Data Generator"]
+    SourceDB[("Operational PostgreSQL")]
+    Raw[("Raw Data / MinIO")]
+    Generator -->|historical files| Raw
+    Generator -->|realtime events| SourceDB
+  end
+
+  subgraph Processing["Ingestion & Processing"]
+    Debezium["Debezium CDC"]
+    Kafka["Kafka"]
+    BronzeLake[("Iceberg Bronze Tables")]
+    Spark["DP2 + DP3 Spark<br/>Transform & Features"]
+    SilverGoldLake[("Iceberg Silver / Gold Tables")]
+    Flink["Flink Realtime<br/>Feature Engineering"]
+
+    Raw --> BronzeLake --> Spark --> SilverGoldLake
+    SourceDB --> Debezium --> Kafka --> Flink
+  end
+
+  subgraph Features["Feast Feature Store"]
+    Offline[("Offline Store<br/>PostgreSQL")]
+    Materialize["Feast Materialization"]
+    Online[("Online Store<br/>Redis")]
+
+    Offline --> Materialize --> Online
+  end
+
+  Spark -->|batch features| Offline
+  Flink -->|stream features| Offline
+  Flink -->|fresh online features| Online
+
+  subgraph Control["Orchestration, Quality & Governance"]
+    Airflow["Airflow Orchestration"]
+    DataChecks["Data Quality + Pipeline Health"]
+    DataHub["DataHub Static Batch Catalog + Lineage"]
+  end
+
+  Airflow -.-> Spark
+  Airflow -.-> Flink
+  Airflow -.-> Materialize
+  Spark -.-> DataChecks
+  Flink -.-> DataChecks
+  Kafka -.-> DataChecks
+  BronzeLake -.-> DataHub
+  SilverGoldLake -.-> DataHub
+```
+
+### Ranking Sequence Model Architecture
+
+The ranking model follows the architecture in [*Behavior Sequence Transformer for E-commerce Recommendation in Alibaba*](https://arxiv.org/pdf/1905.06874): positional and item features represent the ordered behavior sequence, a Transformer captures dependencies between interactions, and its target-item representation is combined with user, item, context, and cross features for CTR prediction.
+
+```mermaid
+flowchart LR
+  subgraph Inputs["Input Features"]
+    Other["Other Features<br/>user, item, context, cross"]
+    SequenceItems["Behavior Sequence + Target Item<br/>item_id, category_id"]
+    Position["Positional Features<br/>relative interaction time"]
+  end
+
+  Other --> OtherEmbedding["Other Feature Embeddings"]
+  SequenceItems --> SequenceEmbedding["Sequence Item Embeddings"]
+  Position --> SequenceEmbedding
+  SequenceEmbedding --> Transformer["Transformer Block<br/>Multi-Head Self-Attention + FFN"]
+  Transformer --> TargetRepresentation["Target-Item Sequence Representation"]
+  OtherEmbedding --> Concatenate["Concatenate"]
+  TargetRepresentation --> Concatenate
+  Concatenate --> MLP["Three-Layer MLP"]
+  MLP --> Sigmoid["Sigmoid"]
+  Sigmoid --> CTR["Click-Through Probability / Ranking Score"]
+```
+
+---
+
+## 📁 Repository Main Folder Structure
+
+```txt
+├── apps/                         # Deployable product and data/ML workloads
+│   ├── analytics/                # Analytics models and dashboard bootstrap
+│   ├── api-serving/              # Online feature and recommendation APIs
+│   ├── data-platform/            # Ingestion, processing, orchestration, feature store, and governance
+│   └── ml-system/                # Training, experimentation, model promotion, and serving packaging
+├── images/                       # Catalog and Dockerfiles for all 15 runtime images
+├── configs/                      # Data-platform and ML-system runtime configuration
+├── docs/                         # Architecture, design, and coursework documentation
+├── infra/                        # Production infrastructure definitions
+│   ├── helm/                     # Kubernetes application charts
+│   └── terraform/gcp/            # GCP infrastructure as code
+├── jenkins/                      # CI/CD jobs, model rollout, and deployment automation
+├── ops/                          # GCP, Kubernetes, and production validation operations
+├── pipelines/kubeflow/           # Generated Kubeflow artifact location
+├── notebooks/                    # Tracked exploration and ML workflow notebooks
+└── tests/                        # Unit, contract, integration, end-to-end, and load tests
+```
+
+---
+
+## 🗂️ Coursework Documentation
+
+The tables below convert the major sections from [Coursework Tracking (Public).xlsx](<docs/xlsx/Coursework Tracking (Public).xlsx>) into navigable documentation indexes.
+
+### Data Platform
+
+Source: tab **`rubic (mini-coursework)`**.
+
+| Rubric area | Coverage |
+| --- | --- |
+| [README and high-level design](README.md) | Business domain, repository structure, table of contents, and deployable-unit architecture. |
+| [Engineering Fundamentals](<docs/submission/rubic-(mini-coursework)/docker.md>) | Docker, Docker Compose, multi-stage builds, and image-size optimization. |
+| [Implement Data Generator](<docs/submission/rubic-(mini-coursework)/data_generator.md>) | Offline skew, high cardinality, schema evolution, duplicates, streaming burst/late events, configuration, and raw storage. |
+| [Processing Jobs](<docs/submission/rubic-(mini-coursework)/processing_jobs.md>) | Spark offline processing, Flink streaming processing, optimization evidence, pipeline integration, and window processing. |
+| [Data Storage](<docs/submission/rubic-(mini-coursework)/data_storage.md>) | Lakehouse compaction/partitioning and data-warehouse indexing. |
+| [Data Pipeline Orchestration](<docs/submission/rubic-(mini-coursework)/data_pipeline_orchestration.md>) | Airflow DP1, DP2, and DP3 ingest/validate stages. |
+| [Data Governance](<docs/submission/rubic-(mini-coursework)/data_governance.md>) | Static DataHub lineage plus 44 CUSTOM assertions and Data Contracts for DP1, DP2, DP3, RAG, and analytics. |
+| [Schema Design](<docs/submission/rubic-(mini-coursework)/schema_design.md>) | Zone schemas, SCD2 dimensions, feature timestamps, table relationships, and naming conventions. |
+| [Novel Ideas](<docs/submission/rubic-(mini-coursework)/novel_ideas.md>) | Grafana-based data-quality monitoring and analytics-platform extensions. |
+
+### ML System
+
+Source: tab **`rubic final-coursework (final -`**.
+
+| Rubric area | Coverage |
+| --- | --- |
+| [High-Level System Design](<docs/submission/rubic-final-coursework-(final-ml)/high_level_system_design.md>) | End-to-end deployment, serving, model, infrastructure, security, and delivery architecture. |
+| [Web API: Pull Online Features](<docs/submission/rubic-final-coursework-(final-ml)/web-api-pull-data.md>) | FastAPI, Pydantic validation, async feature retrieval, health checks, Helm rollout, and fallback. |
+| [Web API: Model Prediction](<docs/submission/rubic-final-coursework-(final-ml)/web-api-model-prediction.md>) | Online features, Triton request construction, inference, ranking, and response validation. |
+| [Real-Time Drift Detection and ML Telemetry](<docs/submission/rubic-final-coursework-(final-ml)/observability.md>) | Drift telemetry, scheduled comparison, dashboards, and Kubeflow retraining trigger. |
+| [Autoscale](<docs/submission/rubic-final-coursework-(final-ml)/autoscale.md>) | KEDA/HPA autoscaling for APIs and Triton with load-test evidence. |
+| [Validation & Verification](<docs/submission/rubic-final-coursework-(final-ml)/validation_verification.md>) | Coverage, fixtures/mocks, equivalence partitions, boundary values, mutation/property-based tests, and load tests. |
+| [Improve the Data Generator](<docs/submission/rubic-final-coursework-(final-ml)/improve_data_generator.md>) | Configurable data drift and ID-label generation for training joins. |
+| [Feature Store](<docs/submission/rubic-final-coursework-(final-ml)/feature_store.md>) | Incremental materialization, streaming writes to offline/online stores, and TTL design. |
+| [ML](<docs/submission/rubic-final-coursework-(final-ml)/ml.md>) | Feast training-data retrieval, train/validation split, BST training, evaluation, and model saving. |
+| [ML Pipelines](<docs/submission/rubic-final-coursework-(final-ml)/ml_pipelines.md>) | Kubeflow pipeline stages, Ray Tune, distributed training, evaluation, and promotion. |
+| [Versioning](<docs/submission/rubic-final-coursework-(final-ml)/versioning.md>) | MLflow model versioning and incremental data versioning. |
+| [CI/CD](<docs/submission/rubic-final-coursework-(final-ml)/ci_cd.md>) | CI/CD for materialization, training, DP1–DP3, APIs, inference, drift detection, and streaming jobs. |
+| [Routing & Gateway](<docs/submission/rubic-final-coursework-(final-ml)/routing_gateway.md>) | NGINX gateway, hidden services, authentication, rate limits, domains, and HTTPS. |
+| [Infrastructure as Code](<docs/submission/rubic-final-coursework-(final-ml)/iac.md>) | Terraform-managed GCP/GKE services and infrastructure layout. |
+| [Observability](<docs/submission/rubic-final-coursework-(final-ml)/observability.md>) | API and infrastructure metrics, logs, traces, Grafana dashboards, and drift monitoring. |
+| [A/B Testing](<docs/submission/rubic-final-coursework-(final-ml)/ab_testing.md>) | Stable/candidate traffic split and per-version monitoring. |
+| [Security](<docs/submission/rubic-final-coursework-(final-ml)/security.md>) | Centralized secret management, service-mesh authentication, mTLS, and authorization. |
+| [Repository Design](<docs/submission/rubic-final-coursework-(final-ml)/repository_design.md>) | Clean repository boundaries, clean code, and design-pattern evidence. |
+| [Low-Level ML Design](<docs/submission/rubic-final-coursework-(final-ml)/low_level_ml_design.md>) | Five key service classes and their implementation mappings. |
+| [Novel Ideas](<docs/submission/rubic-final-coursework-(final-ml)/noval_ideas.md>) | Automated shadow deployment, progressive A/B gates, promotion, fallback, and cleanup. |
+
+### LLM System
+
+Source: tab **`rubic final-coursework (final -llm)`**.
+
+| Rubric area | Coverage |
+| --- | --- |
+| [README and High-Level System Design](README.md) | Business domain, repository structure, table of contents, and deployable-unit architecture. |
+| [Deploy LLM Inference Platform + Setup Custom Model](<docs/submission/rubric-final-coursework-(final-llm)/llm_inference_platform.md>) | llama.cpp custom model serving, llm-d Agent Gateway routing, benchmark comparison, and load-aware optimization evidence. |
+| [Deploy a Global Model Config](<docs/submission/rubric-final-coursework-(final-llm)/global_model_config.md>) | Shared kagent `ModelConfig`, Agent Gateway routing, Secret reference, applied resource evidence, and end-to-end Agent inference. |
+| [Deploy Agent Registry](<docs/submission/rubric-final-coursework-(final-llm)/agent_registry.md>) | Vault-backed Agent Registry `0.4.0`, persistent pgvector, namespace-scoped kagent deployment RBAC, live UI/API proof, and the gated coordinator artifact cutover. |
+| [RAG](<docs/submission/rubric-final-coursework-(final-llm)/rag.md>) | Feast/Milvus-backed ingestion and retrieval pipeline, promoted-index serving, validation, observability, and runtime evidence. |
+| [User and Chunk Retrieval MCP Tool + Agent](<docs/submission/rubric-final-coursework-(final-llm)/agent_pull_data.md>) | FastAPI/Pydantic APIs, four-tool Streamable HTTP MCP server, SandboxAgent, KEDA WorkerPool/MCP autoscaling, registry governance, and kagent UI proof. |
+| [Recommendation Service Agent — Detailed Runtime Proof](<docs/submission/rubric-final-coursework-(final-llm)/agent_recommendation_servicce.md>) | Figure-by-figure FastAPI, inference API, MCP, KEDA autoscaling, gVisor WorkerPool, Agent Registry, and kagent UI evidence with reproducible verification commands. |
+| [Demonstrate Basic Understanding of Agents](<docs/submission/rubric-final-coursework-(final-llm)/agent_notebooks.md>) | Jupyter experiments showing raw A2A requests, MCP `function_call`/`function_response` history, successful recommendation execution, and grounded RAG retrieval. |
+| [Deploy a Coordinator Agent](<docs/submission/rubric-final-coursework-(final-llm)/agent_coordinator.md>) | Intent-routed SandboxAgent, assigned-worker WorkerPool autoscaling, two specialist A2A tools, two direct MCP providers, and governed Registry migration. |
+| [Agent Warm-Up](<docs/submission/rubric-final-coursework-(final-llm)/benchmark_ha.md>) | Reproducible specialist actor warm-up, Substrate/WorkerPool HA, assigned-worker scaling, and rollback evidence. |
+| [Validation & Verification](<docs/submission/rubric-final-coursework-(final-llm)/validation_verification.md>) | RAG API coverage, fixture/mock and parametrized EP/BVA design, property-based idempotency, mutation score, and Locust SLA evidence. |
+| [Improve the Data Generator](<docs/submission/rubic-final-coursework-(final-ml)/improve_data_generator.md>) | Gradual purchase-frequency drift simulation, PSI evidence, and PostgreSQL `ml_ranking_labels` generation for reproducible ranking training data. |
+| [CI/CD](<docs/submission/rubric-final-coursework-(final-llm)/ci_cd.md>) | Shared nine-stage Jenkins contract for the RAG data pipeline and three agent stacks, including immutable image publication, dependency-ordered production deployment, verification, Helm rollback boundaries, and same-commit Agent Registry finalization. |
+| [Routing & Gateway (NGINX Ingress Controller)](<docs/submission/rubric-final-coursework-(final-llm)/routing_gateway.md>) | HTTPS routing for the Agent UI, Agent Registry, and RAG API with Basic Auth, TLS, rate limiting, DNS, and stable internal upstreams. |
+| [IaC](<docs/submission/rubric-final-coursework-(final-llm)/iac.md>) | Modular Terraform architecture for GCP, GKE, and the LLM platform, including Helm ownership and state-safe migration without resource recreation. |
+| [Observability](<docs/submission/rubric-final-coursework-(final-llm)/observability.md>) | Prometheus/Grafana metrics, Loki logs, Tempo and Langfuse traces, LLM token/TTFT telemetry, PII-safe processing, and Agent/MCP operational evidence. |
+| [A/B Testing](<docs/submission/rubric-final-coursework-(final-llm)/a_b.md>) | Sticky champion/candidate agent routing, progressive rollout gates, promotion, and automatic rollback. |
+| [Security](<docs/submission/rubric-final-coursework-(final-llm)/security.md>) | HashiCorp Vault HA/Raft with Cloud KMS auto-unseal, External Secrets synchronization, Agent Gateway API-key authentication, secret rotation, and verification evidence. |
+| [Repository Design](<docs/submission/rubric-final-coursework-(final-llm)/repository_design.md>) | Clean deployable boundaries and Composition Root/DI, Adapter, Strategy/State, Pipeline, and Composite patterns across the LLM, RAG, MCP, and agentic platform. |
+| [Low-Level ML Design](<docs/submission/rubic-final-coursework-(final-ml)/low_level_ml_design.md>) | Five core ML classes: `TrainingDataService`, `SplitService`, `recommenderDataset`, `BST`, and `ModelLifecycleService`. |
+| [Novel Ideas](<docs/submission/rubric-final-coursework-(final-llm)/noval_ideas.md>) | Agent-level progressive delivery, prompt/model release automation, observability-gated promotion, and registry-aware rollback. |
+
+---
+
+## License
+
+This project is licensed under the [Apache License 2.0](LICENSE).
