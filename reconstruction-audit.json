@@ -1,0 +1,3514 @@
+{
+  "schema_version": 1,
+  "source": {
+    "archive": "RecSys-MLops-main.zip",
+    "archive_sha256": "3b5731f96b0b52c6499e3ed2b7eb0099c4e79b7739be294ec4c6e5bf82074601",
+    "supplied_revision": "6bd6e99f481f2a8d5886d6f0e8356540dc20e135",
+    "attribution": "Reference provenance only; target history is a reconstruction and does not impersonate the source revision."
+  },
+  "target": {
+    "repository": "https://github.com/reza-abdi/recsys-platform.git",
+    "branch": "main",
+    "baseline_head": "06e1acc63b91928cfac12528b677a67235bbee76",
+    "planned_steps": 568
+  },
+  "plan_to_commit_mappings": [
+    {
+      "step": 1,
+      "commit": "457e30b7e8875dcd1f102bca2475b3144387b894",
+      "message": "preserve project and vendored protocol attribution",
+      "diff": "nonempty"
+    },
+    {
+      "step": 2,
+      "commit": "65cd42bab69110be30e947fa6e9ef889b2d89930",
+      "message": "exclude credentials and transient build outputs",
+      "diff": "nonempty"
+    },
+    {
+      "step": 3,
+      "commit": "ffd7bd2c8b8493ef7c7c77b7871a52a5f30aa8b3",
+      "message": "record runtime configuration without secret values",
+      "diff": "nonempty"
+    },
+    {
+      "step": 4,
+      "commit": "6feb0177068d769fe9da83d13ef24a4b1724c67a",
+      "message": "establish editable Python package boundaries",
+      "diff": "nonempty"
+    },
+    {
+      "step": 5,
+      "commit": "14cc51228a6c918ef0dc09c6d32b497c033df6a9",
+      "message": "restore root Python tooling and locked dependencies",
+      "diff": "nonempty"
+    },
+    {
+      "step": 6,
+      "commit": "dd079777f25b12bf212b66a1b0f62eb9fcdcb39c",
+      "message": "restore locked component environments",
+      "diff": "nonempty"
+    },
+    {
+      "step": 7,
+      "commit": "4e73a617d4cf4c844a3702f700e9125737812a33",
+      "message": "configure deterministic data generation scenarios",
+      "diff": "nonempty"
+    },
+    {
+      "step": 8,
+      "commit": "a165d21b684b56557e09347e1acdb42a21efa0fc",
+      "message": "define batch data product execution profiles",
+      "diff": "nonempty"
+    },
+    {
+      "step": 9,
+      "commit": "ae0a68470c78c32a269a3154d4aa49970d1f586a",
+      "message": "configure staged RAG data and golden queries",
+      "diff": "nonempty"
+    },
+    {
+      "step": 10,
+      "commit": "23d424b8051095433462668c6f4ba8c577c8e2b9",
+      "message": "configure BST training hyperparameters",
+      "diff": "nonempty"
+    },
+    {
+      "step": 11,
+      "commit": "ba2c39e0f293aef2e4937e7d63b58ce3daf14417",
+      "message": "define synthetic recommendation entities",
+      "diff": "nonempty"
+    },
+    {
+      "step": 12,
+      "commit": "e9aae55b5f9b4495f41761c488e593db73571a9d",
+      "message": "hash canonical event payloads",
+      "diff": "nonempty"
+    },
+    {
+      "step": 13,
+      "commit": "54774b02f58c7e11f8f1374cde8f6d50b778bf5d",
+      "message": "inject deterministic duplicate event scenarios",
+      "diff": "nonempty"
+    },
+    {
+      "step": 14,
+      "commit": "c2d7e0b59e388b873558aa956681ad01c6323913",
+      "message": "model compatible event schema evolution",
+      "diff": "nonempty"
+    },
+    {
+      "step": 15,
+      "commit": "6f943aa4ef768eb731fa0154a89f6747bf306aff",
+      "message": "collect generation challenge statistics",
+      "diff": "nonempty"
+    },
+    {
+      "step": 16,
+      "commit": "aaf76e1f4f3e1c8029d25574cf23b045d55e9cf8",
+      "message": "provide seeded identifiers and weighted sampling",
+      "diff": "nonempty"
+    },
+    {
+      "step": 17,
+      "commit": "b0f4d516fc172e31c13ba1cf52e54813940dfac6",
+      "message": "generate high-cardinality entity scenarios",
+      "diff": "nonempty"
+    },
+    {
+      "step": 18,
+      "commit": "439ef8b3fb3f01b85911adcc8e600f8845a76167",
+      "message": "define Arrow event and commerce schemas",
+      "diff": "nonempty"
+    },
+    {
+      "step": 19,
+      "commit": "88a4fd2cd870b0053542cfe83ce11dfaa9d06eba",
+      "message": "publish generated runs to object storage",
+      "diff": "nonempty"
+    },
+    {
+      "step": 20,
+      "commit": "68c0df5e793e69be336947732912e3e1a169e59d",
+      "message": "validate streaming generator configuration",
+      "diff": "nonempty"
+    },
+    {
+      "step": 21,
+      "commit": "8ab3a598a7075266489da001d52aa00b8bf03317",
+      "message": "validate offline generation configuration",
+      "diff": "nonempty"
+    },
+    {
+      "step": 22,
+      "commit": "cb243f8a145871aaa77cc2f5537a42bc1fabde41",
+      "message": "simulate view cart and purchase sessions",
+      "diff": "nonempty"
+    },
+    {
+      "step": 23,
+      "commit": "038f9059487205b571e8f4ece49f5d3c2638d05d",
+      "message": "apply scheduled feature drift factors",
+      "diff": "nonempty"
+    },
+    {
+      "step": 24,
+      "commit": "1651b8a274d1b788944c51e10626c6882c861e3e",
+      "message": "report drift health and population stability",
+      "diff": "nonempty"
+    },
+    {
+      "step": 25,
+      "commit": "8d7d7c90d9d00b3951563dcec3bfcd57ca88d075",
+      "message": "compose deterministic data challenge stages",
+      "diff": "nonempty"
+    },
+    {
+      "step": 26,
+      "commit": "d057341f37e5cc9dd2be5190fb71513b5eba6304",
+      "message": "generate skewed categories and candidate distributions",
+      "diff": "nonempty"
+    },
+    {
+      "step": 27,
+      "commit": "def70ade72a59ada3ea64dd6038383036c28b426",
+      "message": "generate synthetic users products and sessions",
+      "diff": "nonempty"
+    },
+    {
+      "step": 28,
+      "commit": "059aeb5062db15ee042fcfaae26463d1db772af1",
+      "message": "publish realtime generation metrics",
+      "diff": "nonempty"
+    },
+    {
+      "step": 29,
+      "commit": "6ff817e3fd69c1c6016e27d215d60ea91824a451",
+      "message": "model burst event traffic windows",
+      "diff": "nonempty"
+    },
+    {
+      "step": 30,
+      "commit": "2b93ac3844aa65da0769331be0e482fb31aca3be",
+      "message": "inject bounded event-time delays",
+      "diff": "nonempty"
+    },
+    {
+      "step": 31,
+      "commit": "8471ce1f6e6a4c15de59333809c164a2b4e5dc50",
+      "message": "define streaming event bundle types",
+      "diff": "nonempty"
+    },
+    {
+      "step": 32,
+      "commit": "320ad12816c86dd2f98b86717bdf46e5eee7e28e",
+      "message": "construct correlated streaming event bundles",
+      "diff": "nonempty"
+    },
+    {
+      "step": 33,
+      "commit": "3097c8a6b4b5a1b31cecc2edaf900a77ce5aa581",
+      "message": "compose late-arrival and duplicate replay challenges",
+      "diff": "nonempty"
+    },
+    {
+      "step": 34,
+      "commit": "44e8297486f4ad303070e988a315c4583c212e25",
+      "message": "replay seeded duplicate streaming events",
+      "diff": "nonempty"
+    },
+    {
+      "step": 35,
+      "commit": "02886cfe0b56edfbe63061a84271bb86ca9bd12a",
+      "message": "enforce raw lakehouse and feature bucket boundaries",
+      "diff": "nonempty"
+    },
+    {
+      "step": 36,
+      "commit": "7a0670c6b4ebae48681c17127e2757c57dea38be",
+      "message": "unwrap Debezium change records",
+      "diff": "nonempty"
+    },
+    {
+      "step": 37,
+      "commit": "550678e2bc5aa3658b7c0094c8906d15f9285286",
+      "message": "initialize raw and lakehouse object-store buckets",
+      "diff": "nonempty"
+    },
+    {
+      "step": 38,
+      "commit": "25d7933fc6824dcbb2a05880e90ca058073781fe",
+      "message": "initialize PostgreSQL source tables and indexes",
+      "diff": "nonempty"
+    },
+    {
+      "step": 39,
+      "commit": "3759aa403dd05246970f9337b29068c068e16796",
+      "message": "map CDC topics to canonical source tables",
+      "diff": "nonempty"
+    },
+    {
+      "step": 40,
+      "commit": "ec02609afb046e1b902c6db8140b46241a93df07",
+      "message": "define CDC table keys and event contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 41,
+      "commit": "8fe62c8f0ad0bd9ad01e95f07dec620402f1a3c7",
+      "message": "configure Spark and Flink Iceberg catalogs",
+      "diff": "nonempty"
+    },
+    {
+      "step": 42,
+      "commit": "4eee972dfeffd8958bdf810b92850af055b8e287",
+      "message": "refresh trending recommendation candidate pools",
+      "diff": "nonempty"
+    },
+    {
+      "step": 43,
+      "commit": "7d07f4e0af7b0300cd40c37665e8763d6e8bee99",
+      "message": "pin the Flink Java connector dependency set",
+      "diff": "nonempty"
+    },
+    {
+      "step": 44,
+      "commit": "85ab4fc5c4284ffd2aef1b7dda6f74223d108686",
+      "message": "adapt Flink imports across supported connector runtimes",
+      "diff": "nonempty"
+    },
+    {
+      "step": 45,
+      "commit": "c228775e0693cccfd0b774b14b1da66539e6ee0f",
+      "message": "configure Flink checkpoints and state retention",
+      "diff": "nonempty"
+    },
+    {
+      "step": 46,
+      "commit": "7be3a86ebdf7b93e8f03eda18149f6eb18c5f823",
+      "message": "mark replayed events with managed state",
+      "diff": "nonempty"
+    },
+    {
+      "step": 47,
+      "commit": "dfe7bdfbf00bd1b177c5f947180b8a16789d8e59",
+      "message": "bound synchronous and asynchronous sink throughput",
+      "diff": "nonempty"
+    },
+    {
+      "step": 48,
+      "commit": "7c8f5ce219add4dad51ac742c7b00ec7816c11c4",
+      "message": "parse online and offline streaming job settings",
+      "diff": "nonempty"
+    },
+    {
+      "step": 49,
+      "commit": "4897f2d2db401159d3b6486146edd60e961d5bfc",
+      "message": "normalize UTC streaming timestamps",
+      "diff": "nonempty"
+    },
+    {
+      "step": 50,
+      "commit": "ed981aaa0798bc5e593d39c1d9183c79de49edaf",
+      "message": "classify watermark and late-arrival outcomes",
+      "diff": "nonempty"
+    },
+    {
+      "step": 51,
+      "commit": "089c41f9f10ca2dfc4fb684be5dd96ad147ac0f8",
+      "message": "maintain realtime item feature state",
+      "diff": "nonempty"
+    },
+    {
+      "step": 52,
+      "commit": "1c53dafa2d99b91217ff413e927e36d3570fca2b",
+      "message": "maintain rolling user aggregate state",
+      "diff": "nonempty"
+    },
+    {
+      "step": 53,
+      "commit": "84fa9a349dab65d4d53e2d2e0e9aef87c56b64a8",
+      "message": "maintain correlated user history state",
+      "diff": "nonempty"
+    },
+    {
+      "step": 54,
+      "commit": "2454190ec2a2b1afe5a4652372586f7b7bfdec6e",
+      "message": "maintain event-time rolling feature panes",
+      "diff": "nonempty"
+    },
+    {
+      "step": 55,
+      "commit": "27a922503e86dc55a5b8e4ae744e4661df563a46",
+      "message": "filter events under the configured lateness policy",
+      "diff": "nonempty"
+    },
+    {
+      "step": 56,
+      "commit": "4618202129a7f9ae6f7d2a4b424ae3d0d0efcbae",
+      "message": "aggregate native streaming quality windows",
+      "diff": "nonempty"
+    },
+    {
+      "step": 57,
+      "commit": "39d2aaf0443b80572af20cfb1d2c857f93af3dd4",
+      "message": "map streaming updates to persisted feature rows",
+      "diff": "nonempty"
+    },
+    {
+      "step": 58,
+      "commit": "e9846f3c2fd1ca1fa81318c18dc7968994432c8c",
+      "message": "normalize CDC events and Kafka watermarks",
+      "diff": "nonempty"
+    },
+    {
+      "step": 59,
+      "commit": "26a14f1b47e6beeca7396037ca5c1c1a75fadfe0",
+      "message": "join point-in-time BST training examples",
+      "diff": "nonempty"
+    },
+    {
+      "step": 60,
+      "commit": "e066fbf189508300a59c06be0404273662ec72fb",
+      "message": "aggregate time-aware product features",
+      "diff": "nonempty"
+    },
+    {
+      "step": 61,
+      "commit": "7d05c3d699c8ff1505a246804a03110a1e24f4ea",
+      "message": "derive correlated recommendation outcome labels",
+      "diff": "nonempty"
+    },
+    {
+      "step": 62,
+      "commit": "bd71d67f5d088ff2655bc1b38dfdfe884035d18d",
+      "message": "aggregate user behavior feature windows",
+      "diff": "nonempty"
+    },
+    {
+      "step": 63,
+      "commit": "5029b0988e448c87617e85004a3abe551a8e2bfe",
+      "message": "build ordered user interaction sequences",
+      "diff": "nonempty"
+    },
+    {
+      "step": 64,
+      "commit": "dcf5de85247a0437200a6a791e6cc5b41efdc7f9",
+      "message": "configure Spark sessions and table storage adapters",
+      "diff": "nonempty"
+    },
+    {
+      "step": 65,
+      "commit": "177fcd485e7a33d58b1476ab6c6f40c8f7e4b658",
+      "message": "load raw runs into canonical Iceberg bronze tables",
+      "diff": "nonempty"
+    },
+    {
+      "step": 66,
+      "commit": "1bcc40b10dd99dbcd4c0c80b8759da54ab2ce79b",
+      "message": "compact lakehouse files by table policy",
+      "diff": "nonempty"
+    },
+    {
+      "step": 67,
+      "commit": "f2fd6bb76259588a0b2dedfcb4ca9c4877156889",
+      "message": "clean source events and product history",
+      "diff": "nonempty"
+    },
+    {
+      "step": 68,
+      "commit": "7a0fe2c5c451b2e8d12433c8c51a357306278710",
+      "message": "configure Feast offline and online repositories",
+      "diff": "nonempty"
+    },
+    {
+      "step": 69,
+      "commit": "b05f141ec2c36b6d3b0ec2c1fd64ccfc0b4555d9",
+      "message": "declare recommendation entities and feature services",
+      "diff": "nonempty"
+    },
+    {
+      "step": 70,
+      "commit": "0b2cf7b7368af38506c392487bee8b006a443317",
+      "message": "declare slot-specific RAG vector feature views",
+      "diff": "nonempty"
+    },
+    {
+      "step": 71,
+      "commit": "cff80265fb2f8977dd0a88634b7baf5f329ddfba",
+      "message": "apply editable Feast repository definitions",
+      "diff": "nonempty"
+    },
+    {
+      "step": 72,
+      "commit": "931139d7aa96166cf2f1bbcc8c288d3a1698109f",
+      "message": "snapshot restore and verify SQL Feast registry state",
+      "diff": "nonempty"
+    },
+    {
+      "step": 73,
+      "commit": "985f914b86f02fef6356bb047cc679244ba3229d",
+      "message": "encode prefixed text with pinned ONNX E5 assets",
+      "diff": "nonempty"
+    },
+    {
+      "step": 74,
+      "commit": "b372325d0482236330205fbe192737b8996ae0f3",
+      "message": "define rag data service contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 75,
+      "commit": "bc98a0795c5662fc15547b6c770c8c232df00ab5",
+      "message": "map product catalog fields into RAG metadata",
+      "diff": "nonempty"
+    },
+    {
+      "step": 76,
+      "commit": "2a934ea769f0b78da23c4a12e5789be4748b993f",
+      "message": "bind offline embeddings to the shared E5 encoder contract",
+      "diff": "nonempty"
+    },
+    {
+      "step": 77,
+      "commit": "29aae816e4d2bf13a60b100e9825c8f83e6f1569",
+      "message": "validate chunk embedding and index artifact contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 78,
+      "commit": "4630d41fd375d9c5aa8bdab6c20ccc241b921c42",
+      "message": "persist versioned RAG artifacts with pointer CAS",
+      "diff": "nonempty"
+    },
+    {
+      "step": 79,
+      "commit": "e34e0b101e28243f9906bb586295b037940d2e42",
+      "message": "publish inactive Milvus slots through Feast",
+      "diff": "nonempty"
+    },
+    {
+      "step": 80,
+      "commit": "eac09ced0e989ec78cb903613f78ba7348e51220",
+      "message": "validate promote and rollback active RAG indexes",
+      "diff": "nonempty"
+    },
+    {
+      "step": 81,
+      "commit": "69648e4df6db04bcbe8040b0813ef2af6f04a195",
+      "message": "compose generation and repair prompts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 82,
+      "commit": "33f43ff928e58a9906315a2e7d60b338167daac1",
+      "message": "call OrcaRouter with bounded generation retries",
+      "diff": "nonempty"
+    },
+    {
+      "step": 83,
+      "commit": "4f2c9cf1555e368b1d72f9ee229eeebad8b4fcb8",
+      "message": "split product content into deterministic semantic chunks",
+      "diff": "nonempty"
+    },
+    {
+      "step": 84,
+      "commit": "edaee81fe2a9445f70e76d5b5240f45cad740bdd",
+      "message": "assemble chunking and embedding stages",
+      "diff": "nonempty"
+    },
+    {
+      "step": 85,
+      "commit": "d29cd7d83ddccbd4362f1ded69ae2cef5fb12477",
+      "message": "checkpoint resumable item content generation",
+      "diff": "nonempty"
+    },
+    {
+      "step": 86,
+      "commit": "6beabed8566b9c0581557cd8774d1d05f1674dbf",
+      "message": "generate resumable canonical product documents",
+      "diff": "nonempty"
+    },
+    {
+      "step": 87,
+      "commit": "4d22665ac2ea6b118b68d275e4bebb9d47770cee",
+      "message": "serialize redacted data validation evidence",
+      "diff": "nonempty"
+    },
+    {
+      "step": 88,
+      "commit": "e1bc30edde2a478b464b26670aad2f308544acca",
+      "message": "register and verify Kubernetes CDC connectors",
+      "diff": "nonempty"
+    },
+    {
+      "step": 89,
+      "commit": "aea506c82c91e9e64867959a47ae41e89e07476d",
+      "message": "expose staged RAG artifact lifecycle commands",
+      "diff": "nonempty"
+    },
+    {
+      "step": 90,
+      "commit": "4251b8fb10c287a6d8cc6f4237b2ed0d78c58f9b",
+      "message": "format and push escaped metric samples",
+      "diff": "nonempty"
+    },
+    {
+      "step": 91,
+      "commit": "10fef4bc775ae3645bf7fc005d864697a26d6ff2",
+      "message": "detect offline feature drift with PSI and Evidently",
+      "diff": "nonempty"
+    },
+    {
+      "step": 92,
+      "commit": "94816a77b63ba61351e5c07304f34a8576a03104",
+      "message": "submit and reconcile bounded Ray training jobs",
+      "diff": "nonempty"
+    },
+    {
+      "step": 93,
+      "commit": "407a344971390168de0bef6a3b408370c2ed92ee",
+      "message": "queue immutable model promotion manifests for Jenkins",
+      "diff": "nonempty"
+    },
+    {
+      "step": 94,
+      "commit": "dc4277f1b61f9e428872182720fd58782ca3bd3f",
+      "message": "reconcile progressive model rollout gates",
+      "diff": "nonempty"
+    },
+    {
+      "step": 95,
+      "commit": "148d9b46ffbb267340a4ad614c92ff7cb0ece689",
+      "message": "bind Kubeflow runtime images and pod resources",
+      "diff": "nonempty"
+    },
+    {
+      "step": 96,
+      "commit": "b580416d60bf7390f2e374c460178cc502be2105",
+      "message": "verify deletion of selected Kubeflow pipeline versions",
+      "diff": "nonempty"
+    },
+    {
+      "step": 97,
+      "commit": "c3a4c78532279d83dc8f97e55bec892a031d1336",
+      "message": "assemble Kubeflow training evaluation and promotion tasks",
+      "diff": "nonempty"
+    },
+    {
+      "step": 98,
+      "commit": "c3c088f327d0f8c7aa6f3ce5a5c9105013126724",
+      "message": "compile the image-bound BST Kubeflow pipeline",
+      "diff": "nonempty"
+    },
+    {
+      "step": 99,
+      "commit": "3ad2fdb046656764b7710f475636fc876b20b7a7",
+      "message": "upload or version compiled Kubeflow packages",
+      "diff": "nonempty"
+    },
+    {
+      "step": 100,
+      "commit": "3243d09b3edfb7e8a3f09ab4e5fd0cd6ba1d0a06",
+      "message": "validate compiled pipeline image and graph contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 101,
+      "commit": "90f7f5bb9e6720be02e4217c6c6929955649cb3e",
+      "message": "verify uploaded pipeline identity and version",
+      "diff": "nonempty"
+    },
+    {
+      "step": 102,
+      "commit": "0a596e11706146aff30b715430f859b8dedc40f2",
+      "message": "version training samples with Hudi native upserts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 103,
+      "commit": "7876f89aece4aedb6f44e5ddca399f1760e608f0",
+      "message": "create stable Hudi dataset savepoints",
+      "diff": "nonempty"
+    },
+    {
+      "step": 104,
+      "commit": "dd2f9ce068c9522dc948ee5726d27b8d26b69960",
+      "message": "prepare leakage-safe historical BST training splits",
+      "diff": "nonempty"
+    },
+    {
+      "step": 105,
+      "commit": "dac31ad0ef5f7d8ee8f2ec3980d08c34decc2a55",
+      "message": "attach dataset versions to MLflow runs",
+      "diff": "nonempty"
+    },
+    {
+      "step": 106,
+      "commit": "30e9fbef34a5a46c0f79552afdf7f76d5e41062a",
+      "message": "load and collate padded recommendation sequences",
+      "diff": "nonempty"
+    },
+    {
+      "step": 107,
+      "commit": "30f7ac216b7f804a1a630db93e312510bf0a116b",
+      "message": "implement factorization model embeddings",
+      "diff": "nonempty"
+    },
+    {
+      "step": 108,
+      "commit": "be9fe23ba43d0122b72233067912b9a1dbdf607a",
+      "message": "add model attention and activation layers",
+      "diff": "nonempty"
+    },
+    {
+      "step": 109,
+      "commit": "0fc7adc51ac77be62f7c5f7074600f1b0900a629",
+      "message": "implement transformer attention encoder blocks",
+      "diff": "nonempty"
+    },
+    {
+      "step": 110,
+      "commit": "5eb3a275886e0c215b24ece6f9aa908c53e554ca",
+      "message": "add lightweight interest aggregation encoders",
+      "diff": "nonempty"
+    },
+    {
+      "step": 111,
+      "commit": "7597595e0f56e4eb1ad7713d741dafbd9a4a1390",
+      "message": "assemble position-aware BST recommendation model",
+      "diff": "nonempty"
+    },
+    {
+      "step": 112,
+      "commit": "7dff2f014a57c12c87dedf1064220d52d614971a",
+      "message": "train and evaluate ranked recommendation metrics",
+      "diff": "nonempty"
+    },
+    {
+      "step": 113,
+      "commit": "8d6f29407b0607314a4312e1bec9c2fa67cf72a0",
+      "message": "register model configuration metadata",
+      "diff": "nonempty"
+    },
+    {
+      "step": 114,
+      "commit": "b8518e97427e40ccd70ba18b978e3b90f7a345cc",
+      "message": "trigger versioned retraining from drift evidence",
+      "diff": "nonempty"
+    },
+    {
+      "step": 115,
+      "commit": "211020fc9bbf3c85082b365110c5c2896202d4ac",
+      "message": "publish drift report outcomes to Prometheus",
+      "diff": "nonempty"
+    },
+    {
+      "step": 116,
+      "commit": "62951937edeb2171a661c198a2d54c86b449034c",
+      "message": "generate minimal retraining smoke feature fixtures",
+      "diff": "nonempty"
+    },
+    {
+      "step": 117,
+      "commit": "9432015182b09b7150a8367e8b5186cee4a64fd7",
+      "message": "bind Airflow pod resources and native Spark commands",
+      "diff": "nonempty"
+    },
+    {
+      "step": 118,
+      "commit": "6050d677fa150eb591b51d8675e9b582954ceb09",
+      "message": "schedule validated raw-to-bronze data ingestion",
+      "diff": "nonempty"
+    },
+    {
+      "step": 119,
+      "commit": "1247175bce7cf6a907fb365c2163dc8beb31998f",
+      "message": "schedule silver cleaning and gold label builds",
+      "diff": "nonempty"
+    },
+    {
+      "step": 120,
+      "commit": "8bea38e482105c848cbc7d4c5d217702f1be911f",
+      "message": "schedule offline feature construction and validation",
+      "diff": "nonempty"
+    },
+    {
+      "step": 121,
+      "commit": "286b276e8787f2bd1f8414ae3e94a48265726f26",
+      "message": "schedule recoverable Feast online materialization",
+      "diff": "nonempty"
+    },
+    {
+      "step": 122,
+      "commit": "deee81b6af85ab72ab8e6580b01788d6536235d9",
+      "message": "schedule drift evidence and retraining decisions",
+      "diff": "nonempty"
+    },
+    {
+      "step": 123,
+      "commit": "0d7a9ca9397e6e9a3dfe82dcf87333f2999c3b68",
+      "message": "schedule the five-stage RAG index lifecycle",
+      "diff": "nonempty"
+    },
+    {
+      "step": 124,
+      "commit": "6d81c3083d719d65bd15ed8b30bd86ee09c47953",
+      "message": "define recsys serving common service contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 125,
+      "commit": "ff541a582ccd42bd752c1e3fbaff3b7363c603d2",
+      "message": "parse shared boolean and integer environment settings",
+      "diff": "nonempty"
+    },
+    {
+      "step": 126,
+      "commit": "5c1daa1cb777e6d1110d03ebdc1632ac8404157c",
+      "message": "instrument recsys serving common operations",
+      "diff": "nonempty"
+    },
+    {
+      "step": 127,
+      "commit": "663e54583679a8cc0308b8537782f7d1d3ef7dfd",
+      "message": "bound asynchronous request capacity and worker queues",
+      "diff": "nonempty"
+    },
+    {
+      "step": 128,
+      "commit": "20a5e4b09235c254593b24b64f9e33e38adde70f",
+      "message": "expose shared health readiness and version endpoints",
+      "diff": "nonempty"
+    },
+    {
+      "step": 129,
+      "commit": "39c4dfbcbcb9cacf23734c85fc9f4e1b13b51b45",
+      "message": "load recsys online feature api runtime settings",
+      "diff": "nonempty"
+    },
+    {
+      "step": 130,
+      "commit": "ff4d18971917231464233bd4fe2b46886e5b505b",
+      "message": "hydrate online user and candidate features through Feast",
+      "diff": "nonempty"
+    },
+    {
+      "step": 131,
+      "commit": "9aa1979843b913bb87cbd743299e1b07e36cf5e9",
+      "message": "wire recsys online feature api application lifecycle and routes",
+      "diff": "nonempty"
+    },
+    {
+      "step": 132,
+      "commit": "d5446e46eb314f9639c5cb7df6acd4a9a5bad1b6",
+      "message": "fetch online features with bounded HTTP timeouts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 133,
+      "commit": "9bb854fe4bdcd6ded21fbaa63b93ae041efac1db",
+      "message": "derive stable experiment metric labels",
+      "diff": "nonempty"
+    },
+    {
+      "step": 134,
+      "commit": "2859d229da185a6313102ec89f7f029973cb2e14",
+      "message": "validate inference request and ranking response models",
+      "diff": "nonempty"
+    },
+    {
+      "step": 135,
+      "commit": "f153a36bcf49b4095c4752539b7670901738d91b",
+      "message": "write typed local Parquet partitions",
+      "diff": "nonempty"
+    },
+    {
+      "step": 136,
+      "commit": "a7c6edce90f9cc2d1fa6f4aae1f22c171b0d7cc6",
+      "message": "summarize drift and ranking-label correlation",
+      "diff": "nonempty"
+    },
+    {
+      "step": 137,
+      "commit": "b932b554eb08f735236a069836edea9cc5daa4d2",
+      "message": "report generated partition and challenge quality",
+      "diff": "nonempty"
+    },
+    {
+      "step": 138,
+      "commit": "0d55f24f388932dcf0680838757dea28d4ea30f0",
+      "message": "load generated records through PostgreSQL upserts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 139,
+      "commit": "0c2a8060d277906d506c9db7b3b89c6e5d347902",
+      "message": "write realtime bundles to PostgreSQL",
+      "diff": "nonempty"
+    },
+    {
+      "step": 140,
+      "commit": "db21284a74f749d7f83932915b8c09562269c118",
+      "message": "run the bounded realtime event producer",
+      "diff": "nonempty"
+    },
+    {
+      "step": 141,
+      "commit": "454534021ee60077c1e5255b37b11f9409c273b6",
+      "message": "validate generated data invariants",
+      "diff": "nonempty"
+    },
+    {
+      "step": 142,
+      "commit": "f7aba956ef5fdc53ddf8d1edaa41b4976d73af0b",
+      "message": "orchestrate historical simulation and persisted runs",
+      "diff": "nonempty"
+    },
+    {
+      "step": 143,
+      "commit": "b0984e45bb09b6e8fff2343ea077887027990970",
+      "message": "expose historical generation and validation commands",
+      "diff": "nonempty"
+    },
+    {
+      "step": 144,
+      "commit": "20c28ef1c95fe15f3c67b8877b738e7edc3dca9d",
+      "message": "run historical generation and object-store upload",
+      "diff": "nonempty"
+    },
+    {
+      "step": 145,
+      "commit": "bc0fa33f05fa2c21c8652bbf233bb286bda853cb",
+      "message": "load bounded realtime bundles into source PostgreSQL",
+      "diff": "nonempty"
+    },
+    {
+      "step": 146,
+      "commit": "98883f66fbd792af8e70b2635e97d8c8903102e7",
+      "message": "load recsys inference api runtime settings",
+      "diff": "nonempty"
+    },
+    {
+      "step": 147,
+      "commit": "fe08b8032cd8e076d8fb2ddb7837bf6e7b46fc37",
+      "message": "score ranker batches through Triton gRPC",
+      "diff": "nonempty"
+    },
+    {
+      "step": 148,
+      "commit": "ea15ea6d07b4a773304d9394448b672f919aff80",
+      "message": "assign deterministic model routes and shadow traffic",
+      "diff": "nonempty"
+    },
+    {
+      "step": 149,
+      "commit": "99f7139fc71ad78602fdc3d627ebb6466bd4acf5",
+      "message": "normalize candidates and format top-k Triton scores",
+      "diff": "nonempty"
+    },
+    {
+      "step": 150,
+      "commit": "5a7c4c6ff026cfe3c223d256acd5645a4c9a98b6",
+      "message": "bound and drain asynchronous shadow predictions",
+      "diff": "nonempty"
+    },
+    {
+      "step": 151,
+      "commit": "d4cb8494a1fe0bfb57ea9cdfc28893280d7a7602",
+      "message": "wire recsys inference api application lifecycle and routes",
+      "diff": "nonempty"
+    },
+    {
+      "step": 152,
+      "commit": "2a424e7e1396aa52c10be6584b91705567c93e1f",
+      "message": "batch concurrent query encoding requests",
+      "diff": "nonempty"
+    },
+    {
+      "step": 153,
+      "commit": "75dc823b3c93377481d3adad023a68ed661ebcb2",
+      "message": "define recsys rag api service contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 154,
+      "commit": "5b31a09b21b6bef2ea349a879e3dc7236d81f6a3",
+      "message": "reload and validate active embedding pointers",
+      "diff": "nonempty"
+    },
+    {
+      "step": 155,
+      "commit": "8b3f209b815d4318b343b790f7bdc8b8be40c8a7",
+      "message": "resolve exact chunk records from active Feast slots",
+      "diff": "nonempty"
+    },
+    {
+      "step": 156,
+      "commit": "ac7a9f6550160cdb35a0d81a397abe41943cbe57",
+      "message": "filter and group grounded vector retrieval evidence",
+      "diff": "nonempty"
+    },
+    {
+      "step": 157,
+      "commit": "8b5a9db95b5f29e6637c48c9ca969b77d6c3d65b",
+      "message": "load recsys rag api runtime settings",
+      "diff": "nonempty"
+    },
+    {
+      "step": 158,
+      "commit": "ca9f654f3191b6d22c8852f07095515837791c4f",
+      "message": "wire recsys rag api application lifecycle and routes",
+      "diff": "nonempty"
+    },
+    {
+      "step": 159,
+      "commit": "b738f7c19851d1d7679102e24e88975b439a878c",
+      "message": "define recsys feature rag mcp service contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 160,
+      "commit": "a4d46275804c88d441eb8fc6efa7bbcfc80c34f1",
+      "message": "return typed context downstream tool failures",
+      "diff": "nonempty"
+    },
+    {
+      "step": 161,
+      "commit": "26ea9b56b540bcda6009c75b520aa83fae9890d8",
+      "message": "instrument recsys feature rag mcp operations",
+      "diff": "nonempty"
+    },
+    {
+      "step": 162,
+      "commit": "5e49a2c6e2b863daef1c4672b3a188c02f7caad9",
+      "message": "share bounded JSON HTTP clients across context tools",
+      "diff": "nonempty"
+    },
+    {
+      "step": 163,
+      "commit": "2e836e2fd471b37d171cf0666c501f0b36ed8216",
+      "message": "adapt online-feature HTTP responses for context tools",
+      "diff": "nonempty"
+    },
+    {
+      "step": 164,
+      "commit": "345965afcb0aa4adac49e23467c321784b723592",
+      "message": "adapt grounded retrieval and exact chunk HTTP calls",
+      "diff": "nonempty"
+    },
+    {
+      "step": 165,
+      "commit": "45294adfae3c3d7f27655177cce0b61f3b98b020",
+      "message": "expose recsys feature rag mcp protocol handlers",
+      "diff": "nonempty"
+    },
+    {
+      "step": 166,
+      "commit": "485e4cea9222cdb2567ecb9aa58d5a77950e25e0",
+      "message": "load recsys feature rag mcp runtime settings",
+      "diff": "nonempty"
+    },
+    {
+      "step": 167,
+      "commit": "5a0b2db994689cfae502ad3c250ba48b3cbd86cf",
+      "message": "wire recsys feature rag mcp application lifecycle and routes",
+      "diff": "nonempty"
+    },
+    {
+      "step": 168,
+      "commit": "598743a0108725eb76bc23fe2188fb6e730efab4",
+      "message": "define recsys recommendation mcp service contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 169,
+      "commit": "4c897bbcec5911bf0506be3f0fcf593798e7dc0a",
+      "message": "return typed recommendation downstream tool failures",
+      "diff": "nonempty"
+    },
+    {
+      "step": 170,
+      "commit": "19cbb409e26b18ecd634123e797de74893fe11cd",
+      "message": "instrument recsys recommendation mcp operations",
+      "diff": "nonempty"
+    },
+    {
+      "step": 171,
+      "commit": "1f01aea5a5ece08a05141fae1c962550193abafe",
+      "message": "validate recommendation requests and retry policy",
+      "diff": "nonempty"
+    },
+    {
+      "step": 172,
+      "commit": "6c09149635411331ff79e8321643216c89aa778b",
+      "message": "retry recommendation HTTP calls within a total deadline",
+      "diff": "nonempty"
+    },
+    {
+      "step": 173,
+      "commit": "6abf9d099203300c1223c09752e15d99c728f38b",
+      "message": "expose recsys recommendation mcp protocol handlers",
+      "diff": "nonempty"
+    },
+    {
+      "step": 174,
+      "commit": "f7ae888885cfc07d8b5e41a94808f2dfa41c6433",
+      "message": "load recsys recommendation mcp runtime settings",
+      "diff": "nonempty"
+    },
+    {
+      "step": 175,
+      "commit": "789f7ef5ffca54c36eb34e258d3bbbd551fbb95b",
+      "message": "wire recsys recommendation mcp application lifecycle and routes",
+      "diff": "nonempty"
+    },
+    {
+      "step": 176,
+      "commit": "ed43ccea5cb0b5420193ec2a1605793c7814a63b",
+      "message": "validate demo catalog interaction and ranking models",
+      "diff": "nonempty"
+    },
+    {
+      "step": 177,
+      "commit": "b6c3d2933de2dc496a0f72875247a4f79f18e3f8",
+      "message": "evaluate BST checkpoints and log model metrics",
+      "diff": "nonempty"
+    },
+    {
+      "step": 178,
+      "commit": "40b7e15dd359da68104d9a1149a9e30427320b4c",
+      "message": "evaluate the selected Ray best model artifact",
+      "diff": "nonempty"
+    },
+    {
+      "step": 179,
+      "commit": "938257513e00a4be9a0c57a17fa536f987abe76f",
+      "message": "export ONNX and assemble Triton model repositories",
+      "diff": "nonempty"
+    },
+    {
+      "step": 180,
+      "commit": "13fbf7e5c588b0bee802f79d57674634e1a59d86",
+      "message": "run local BST training with MLflow logging",
+      "diff": "nonempty"
+    },
+    {
+      "step": 181,
+      "commit": "82eaa0d7cc6a1e911b2addb5c92f0d316f0c57ca",
+      "message": "tune BST hyperparameters across Ray trials",
+      "diff": "nonempty"
+    },
+    {
+      "step": 182,
+      "commit": "1bfe756252e3c12192f5686c9ec99aa5b0ea4785",
+      "message": "train BST with distributed Ray checkpoints",
+      "diff": "nonempty"
+    },
+    {
+      "step": 183,
+      "commit": "e56cbdef46f6eb6fbffc3a5ff27bc1d0bb7745e5",
+      "message": "define deterministic demo event identifiers",
+      "diff": "nonempty"
+    },
+    {
+      "step": 184,
+      "commit": "6076b9bcc6885e5236fe46bd1d79ceeaf40e606e",
+      "message": "open bounded demo PostgreSQL repositories",
+      "diff": "nonempty"
+    },
+    {
+      "step": 185,
+      "commit": "4da0fa88773f25b359e08eaeba00bf468703ccfa",
+      "message": "persist idempotent interaction events",
+      "diff": "nonempty"
+    },
+    {
+      "step": 186,
+      "commit": "140eac4b7cee4aaac43924f803851580a57637a9",
+      "message": "persist recommendation requests and impressions",
+      "diff": "nonempty"
+    },
+    {
+      "step": 187,
+      "commit": "61454a8d7cf2e51be43b09de8947c7121b634b54",
+      "message": "trace demo API dependencies without credential export",
+      "diff": "nonempty"
+    },
+    {
+      "step": 188,
+      "commit": "84e977f1cafb86741dce222a3896aaed53e384a3",
+      "message": "start demo API dependencies and request telemetry",
+      "diff": "nonempty"
+    },
+    {
+      "step": 189,
+      "commit": "b51244e558163a66d67f5a6696298d19e781b544",
+      "message": "expose paginated demo user and product catalogs",
+      "diff": "nonempty"
+    },
+    {
+      "step": 190,
+      "commit": "fb71a69046644f6861b252ec1bcaf2d43b250c85",
+      "message": "accept demo interaction events with conflict handling",
+      "diff": "nonempty"
+    },
+    {
+      "step": 191,
+      "commit": "707888448de796b62c1be46e275e75f812460854",
+      "message": "report correlated feature propagation status",
+      "diff": "nonempty"
+    },
+    {
+      "step": 192,
+      "commit": "c6d24ad5e528528b29b5a809e498987ecf946c13",
+      "message": "hydrate and persist demo recommendation responses",
+      "diff": "nonempty"
+    },
+    {
+      "step": 193,
+      "commit": "832ab110ab2b357512acd0b31cda204bc4b4eab3",
+      "message": "export deterministic demo HTTP contract snapshots",
+      "diff": "nonempty"
+    },
+    {
+      "step": 194,
+      "commit": "6be52885ebe8686a6f33e2f04449d7c318f28d5a",
+      "message": "schedule silver synchronization and dbt analytics",
+      "diff": "nonempty"
+    },
+    {
+      "step": 195,
+      "commit": "c057736d26f4af37fcd39aace67b99233c72c0e3",
+      "message": "synchronize canonical silver tables into analytics",
+      "diff": "nonempty"
+    },
+    {
+      "step": 196,
+      "commit": "563cea1f33a901e5bcecc99bdce4ab63f1a022c8",
+      "message": "initialize the analytics Iceberg catalog",
+      "diff": "nonempty"
+    },
+    {
+      "step": 197,
+      "commit": "18ff9c613745edc53e8159084c608ca5b7cb5e98",
+      "message": "provision deterministic Superset datasets and charts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 198,
+      "commit": "41aeeb00a7db0014378df5015fa3d71277ee6928",
+      "message": "export and checksum the pinned E5 encoder",
+      "diff": "nonempty"
+    },
+    {
+      "step": 199,
+      "commit": "493647762a6fb343b00426478c467071117acbae",
+      "message": "measure grounded RAG recall and response latency",
+      "diff": "nonempty"
+    },
+    {
+      "step": 200,
+      "commit": "9f4a1896e24f1923637208feccb41bcaea780caa",
+      "message": "manage configuration",
+      "diff": "nonempty"
+    },
+    {
+      "step": 201,
+      "commit": "8560d5002faaf9071ffeca1cb0dbe9a30cd8ea0f",
+      "message": "manage helm oci",
+      "diff": "nonempty"
+    },
+    {
+      "step": 202,
+      "commit": "1ade5b594a0303908881e25964d759a77f73efe9",
+      "message": "manage image catalog",
+      "diff": "nonempty"
+    },
+    {
+      "step": 203,
+      "commit": "62ec17b366116c353c2969a8aea8704d70de02c9",
+      "message": "manage artifact",
+      "diff": "nonempty"
+    },
+    {
+      "step": 204,
+      "commit": "1d4ded91e1a06486973209d591c2844885ca8bc6",
+      "message": "manage capacity",
+      "diff": "nonempty"
+    },
+    {
+      "step": 205,
+      "commit": "d0091d6cd2baceb41ee1d3dcef41f8d5da1ae759",
+      "message": "manage dashboard",
+      "diff": "nonempty"
+    },
+    {
+      "step": 206,
+      "commit": "2ba2c228abc8267fd4686fa6a9de51de9ad4923a",
+      "message": "capture evidence",
+      "diff": "nonempty"
+    },
+    {
+      "step": 207,
+      "commit": "6920330789c449afa8778e84d6a4c69018edce1d",
+      "message": "validate gates",
+      "diff": "nonempty"
+    },
+    {
+      "step": 208,
+      "commit": "f03801b587a52c94c7db6a8ffb9c3e88f8697490",
+      "message": "validate output schema",
+      "diff": "nonempty"
+    },
+    {
+      "step": 209,
+      "commit": "18be0382de9f363b988160697edb02886a3aefd3",
+      "message": "manage release",
+      "diff": "nonempty"
+    },
+    {
+      "step": 210,
+      "commit": "7f5f69e089fe89310fded8e47a5d99b2fb3ed538",
+      "message": "manage cleanup",
+      "diff": "nonempty"
+    },
+    {
+      "step": 211,
+      "commit": "0024482c55212f1f526be7fcf556ed8dbc406ccc",
+      "message": "manage engine",
+      "diff": "nonempty"
+    },
+    {
+      "step": 212,
+      "commit": "3b57b8e08c7369bb72cf9aaa1119b0106d3e4be4",
+      "message": "manage manifests",
+      "diff": "nonempty"
+    },
+    {
+      "step": 213,
+      "commit": "dcefb5e79543ae5c337b0a17c38bc91de5a5624b",
+      "message": "coordinate model onboarding",
+      "diff": "nonempty"
+    },
+    {
+      "step": 214,
+      "commit": "d9ee8ce0f8190fcc569fedfdab65362d99357501",
+      "message": "manage offline export",
+      "diff": "nonempty"
+    },
+    {
+      "step": 215,
+      "commit": "6dba0c1161530926b604d318febec766e1cfbdea",
+      "message": "coordinate provision",
+      "diff": "nonempty"
+    },
+    {
+      "step": 216,
+      "commit": "5b1d863ed6b063ff645ec44b3e405119ca96010f",
+      "message": "manage evaluation prepare",
+      "diff": "nonempty"
+    },
+    {
+      "step": 217,
+      "commit": "67723642c8677ac3535d6e5e1e494fcadc7e0bfb",
+      "message": "coordinate global config dispatch",
+      "diff": "nonempty"
+    },
+    {
+      "step": 218,
+      "commit": "059746a650b4fea5678256d198d1cf921a90deca",
+      "message": "manage langfuse automation",
+      "diff": "nonempty"
+    },
+    {
+      "step": 219,
+      "commit": "167c23506e99b53d939eff8247f06fb8dba73243",
+      "message": "manage recommendation evaluation",
+      "diff": "nonempty"
+    },
+    {
+      "step": 220,
+      "commit": "36b29750884800043a4fc4d2a01d77100510c7b4",
+      "message": "validate release guard",
+      "diff": "nonempty"
+    },
+    {
+      "step": 221,
+      "commit": "78dc920a1a578a088532c0e3995acd65bbeb2611",
+      "message": "restore reviewed Qwen native tool templates",
+      "diff": "nonempty"
+    },
+    {
+      "step": 222,
+      "commit": "db679c4f5dc9a5525dd4fa85747d5be1f2af2469",
+      "message": "manage serving profiles",
+      "diff": "nonempty"
+    },
+    {
+      "step": 223,
+      "commit": "579419277fed11e3885f7b8eb255abe5693d1aea",
+      "message": "manage small compatibility",
+      "diff": "nonempty"
+    },
+    {
+      "step": 224,
+      "commit": "a730b8e9125feb1bcbf02c10674264cd16948aca",
+      "message": "manage offline",
+      "diff": "nonempty"
+    },
+    {
+      "step": 225,
+      "commit": "414353941ee496aa7f6dc7fda5a2441dcd7576c2",
+      "message": "manage smoke",
+      "diff": "nonempty"
+    },
+    {
+      "step": 226,
+      "commit": "4e61fd115bb205ed2a556ba2e96d58f946fa8d55",
+      "message": "manage workflow",
+      "diff": "nonempty"
+    },
+    {
+      "step": 227,
+      "commit": "7cad75ecba53c84a2bfbdc0cb6b8d433eefd0f99",
+      "message": "validate workflow contract",
+      "diff": "nonempty"
+    },
+    {
+      "step": 228,
+      "commit": "b7900fb8c4fb53a4c729515dee12e57c765f8c1d",
+      "message": "capture workflow evidence",
+      "diff": "nonempty"
+    },
+    {
+      "step": 229,
+      "commit": "1010b0a5e3c0cf0d1c67b6c9d76f1e9ee5b542ba",
+      "message": "manage code evaluation",
+      "diff": "nonempty"
+    },
+    {
+      "step": 230,
+      "commit": "f83672b2e3e5b99c059be22f8acbe65fe0043560",
+      "message": "manage runtime probe",
+      "diff": "nonempty"
+    },
+    {
+      "step": 231,
+      "commit": "b4081669444265ed93907225ffda48827dd1da13",
+      "message": "validate migration policy",
+      "diff": "nonempty"
+    },
+    {
+      "step": 232,
+      "commit": "0164882110d6bbfb49fb8c857242afe7c0328a1b",
+      "message": "manage config",
+      "diff": "nonempty"
+    },
+    {
+      "step": 233,
+      "commit": "5ee1206b0ac1b2068ffe2c616c3d005f36e7c91b",
+      "message": "manage helm release",
+      "diff": "nonempty"
+    },
+    {
+      "step": 234,
+      "commit": "0018d7dfa6fae652140b47f38a5f8861c6b2dc5c",
+      "message": "manage manifests for model cd",
+      "diff": "nonempty"
+    },
+    {
+      "step": 235,
+      "commit": "8c65a6e3f67777b951caf446f3065fb96cf1df58",
+      "message": "validate promotion gates",
+      "diff": "nonempty"
+    },
+    {
+      "step": 236,
+      "commit": "7a78323072667ee8bd799398e2a98a2a069c63a7",
+      "message": "manage cli",
+      "diff": "nonempty"
+    },
+    {
+      "step": 237,
+      "commit": "9ca7c07d05225d6acd58ab7c66c05405d24246ad",
+      "message": "manage storage",
+      "diff": "nonempty"
+    },
+    {
+      "step": 238,
+      "commit": "f6d225976343398da644c7be0eb1c78eee2b1dba",
+      "message": "manage recommendation prepare",
+      "diff": "nonempty"
+    },
+    {
+      "step": 239,
+      "commit": "cd7fb54b84afa8771773558104080fbe27810161",
+      "message": "manage state",
+      "diff": "nonempty"
+    },
+    {
+      "step": 240,
+      "commit": "1e5924cc1d0830e609692a4bc27fa8467ee629da",
+      "message": "manage live test",
+      "diff": "nonempty"
+    },
+    {
+      "step": 241,
+      "commit": "59b03f010c7c3c8bd0eac67a9a7479e1e0d5bc58",
+      "message": "coordinate workflow provision",
+      "diff": "nonempty"
+    },
+    {
+      "step": 242,
+      "commit": "06356b84653b1ebca921517ec3461f8d92fc5f66",
+      "message": "manage release plan",
+      "diff": "nonempty"
+    },
+    {
+      "step": 243,
+      "commit": "262f5ab75cbfa9b20ffd9287d1dc34d6370ec810",
+      "message": "manage agent registry release",
+      "diff": "nonempty"
+    },
+    {
+      "step": 244,
+      "commit": "6029df20e242c741357b699e7c8d48a404e5877a",
+      "message": "manage detector",
+      "diff": "nonempty"
+    },
+    {
+      "step": 245,
+      "commit": "01ff5de538b254a49017a3d8e62840ea5fa2b355",
+      "message": "coordinate deployment transaction",
+      "diff": "nonempty"
+    },
+    {
+      "step": 246,
+      "commit": "b6ebcce21bb8e08dc7f582959c7d1b2bb4788e03",
+      "message": "manage substrate state",
+      "diff": "nonempty"
+    },
+    {
+      "step": 247,
+      "commit": "4949efba1eb0dd292f5226afacfe1a8cdd1ea791",
+      "message": "capture test report",
+      "diff": "nonempty"
+    },
+    {
+      "step": 248,
+      "commit": "0f3d468cf79f811a36fc544aba966962a87f777e",
+      "message": "read trusted kagent child-task completion evidence",
+      "diff": "nonempty"
+    },
+    {
+      "step": 249,
+      "commit": "5ff7bd8903eaf74806d6619b55f67583d75497c3",
+      "message": "preserve router protocol compiler dependencies",
+      "diff": "nonempty"
+    },
+    {
+      "step": 250,
+      "commit": "0bca38c536ac18556ef9fe43fcdc8856dadafcd9",
+      "message": "vendor the pinned A2A and kagent session protocols",
+      "diff": "nonempty"
+    },
+    {
+      "step": 251,
+      "commit": "2b61e577c8ce1c227138e87453d6259b076e6c01",
+      "message": "compile pinned A2A and kagent session bindings",
+      "diff": "nonempty"
+    },
+    {
+      "step": 252,
+      "commit": "39e53ba43254203bf2ff7cc2b63898df6eee3793",
+      "message": "reconcile durable recommendation rollout actions and gates",
+      "diff": "nonempty"
+    },
+    {
+      "step": 253,
+      "commit": "6339c132c2a614c73b6ad9c7a84e2c361008f2f8",
+      "message": "define durable agent experiment tables",
+      "diff": "nonempty"
+    },
+    {
+      "step": 254,
+      "commit": "b7d90bfe67d68372bfb25069d6160ae031ebee2c",
+      "message": "persist controller action and tick ownership",
+      "diff": "nonempty"
+    },
+    {
+      "step": 255,
+      "commit": "bc34bfda72ec0eecc9d785c35380acbc3fc36f76",
+      "message": "track single-owner live traffic runs",
+      "diff": "nonempty"
+    },
+    {
+      "step": 256,
+      "commit": "7930e9128024a74dd97faff78a73b16db05fbd2f",
+      "message": "enforce live and external ticket claims",
+      "diff": "nonempty"
+    },
+    {
+      "step": 257,
+      "commit": "6761866d5755b6751e7114170d32fe3601c792af",
+      "message": "retain experiment sessions and evaluation results",
+      "diff": "nonempty"
+    },
+    {
+      "step": 258,
+      "commit": "b46596ee791b6d03f81bec91ad70c10450e6b630",
+      "message": "manage driver",
+      "diff": "nonempty"
+    },
+    {
+      "step": 259,
+      "commit": "ce58478a766be3055f7bfbd4ba27399934674fe5",
+      "message": "manage   main",
+      "diff": "nonempty"
+    },
+    {
+      "step": 260,
+      "commit": "4fca2fa9543f04f69a7fffeaf510e4223db89106",
+      "message": "manage baseline cutover",
+      "diff": "nonempty"
+    },
+    {
+      "step": 261,
+      "commit": "b503874c40ea9667545e9c3e642817bf763c1bcb",
+      "message": "manage baseline prepare",
+      "diff": "nonempty"
+    },
+    {
+      "step": 262,
+      "commit": "da7cb4856f463576a659c7cd0284ac2383e83067",
+      "message": "manage capacity window",
+      "diff": "nonempty"
+    },
+    {
+      "step": 263,
+      "commit": "0c82ecb064eb9f81a21e1f598be1701540ec7559",
+      "message": "validate context contract deploy",
+      "diff": "nonempty"
+    },
+    {
+      "step": 264,
+      "commit": "578d4c86bc715e31522a53751ac326f1e61bef78",
+      "message": "coordinate default agents deploy",
+      "diff": "nonempty"
+    },
+    {
+      "step": 265,
+      "commit": "d815fa316f107360d89bd3d9043390b89b8ae6de",
+      "message": "coordinate evaluation deploy",
+      "diff": "nonempty"
+    },
+    {
+      "step": 266,
+      "commit": "a75127158ec747a19ce2bc51a312d531482c1093",
+      "message": "coordinate onboarding compatibility",
+      "diff": "nonempty"
+    },
+    {
+      "step": 267,
+      "commit": "0e38244ba61b3ca3583e86d6377789510065433d",
+      "message": "coordinate onboarding",
+      "diff": "nonempty"
+    },
+    {
+      "step": 268,
+      "commit": "f17bc6399f0293568d7715636f8fe56ccaba62c2",
+      "message": "coordinate recommendation action",
+      "diff": "nonempty"
+    },
+    {
+      "step": 269,
+      "commit": "e3ccd69ccc29ed9e94f6a41872c5998ffa4694fd",
+      "message": "manage recommendation baseline migration",
+      "diff": "nonempty"
+    },
+    {
+      "step": 270,
+      "commit": "30b806fe669ccf81dd033e5c61171f55966a8845",
+      "message": "capture snapshot",
+      "diff": "nonempty"
+    },
+    {
+      "step": 271,
+      "commit": "13230032558de031b4e7d2ce861728f54da38486",
+      "message": "coordinate trigger deploy",
+      "diff": "nonempty"
+    },
+    {
+      "step": 272,
+      "commit": "dc692cc69b2e061c84825ddc8c2dfed749b2c421",
+      "message": "capture workflow snapshot",
+      "diff": "nonempty"
+    },
+    {
+      "step": 273,
+      "commit": "3507e3e4c96a0022e3d9dc2925dd58e4114536dd",
+      "message": "drain evaluation outbox with Langfuse score readback",
+      "diff": "nonempty"
+    },
+    {
+      "step": 274,
+      "commit": "7d1c69267abddc6a172032230ae69ac49e8b34be",
+      "message": "manage langfuse preflight",
+      "diff": "nonempty"
+    },
+    {
+      "step": 275,
+      "commit": "8002b462ab2ea3dbee3c0abf67192e0d10925131",
+      "message": "trace agent experiment invocations without credential export",
+      "diff": "nonempty"
+    },
+    {
+      "step": 276,
+      "commit": "db37d2fe4986379b536d7bae7cc6c8f7a8a9077b",
+      "message": "render trusted child results for routed workflows",
+      "diff": "nonempty"
+    },
+    {
+      "step": 277,
+      "commit": "fbccc893a1c635d98078912924e1713b78c198c1",
+      "message": "wire agent router health identity and allocation",
+      "diff": "nonempty"
+    },
+    {
+      "step": 278,
+      "commit": "0b1034825c7b9de86770e029ab98a1b3d57e90c5",
+      "message": "verify experiment tickets and evidence access",
+      "diff": "nonempty"
+    },
+    {
+      "step": 279,
+      "commit": "c807bd57b1caf75f308c79f9588e0240722f8f0e",
+      "message": "route recommendation A2A streaming requests",
+      "diff": "nonempty"
+    },
+    {
+      "step": 280,
+      "commit": "298e4d61a13abd53f9fe80ca31e9f3b1709c6bd5",
+      "message": "serve root workflow dispatch and router metrics",
+      "diff": "nonempty"
+    },
+    {
+      "step": 281,
+      "commit": "992dc69a34219da779347cc7c098e74df828ee3f",
+      "message": "sign and verify single-use case-bound A2A tickets",
+      "diff": "nonempty"
+    },
+    {
+      "step": 282,
+      "commit": "a74544e04f30dc8a1b0e77a0bf799ed6b8017a4d",
+      "message": "manage external cases",
+      "diff": "nonempty"
+    },
+    {
+      "step": 283,
+      "commit": "26691858f660b0caae11dec8e26e9dceb08acd12",
+      "message": "manage llm ab traffic",
+      "diff": "nonempty"
+    },
+    {
+      "step": 284,
+      "commit": "22c4de90891824bad64499cf2d52d210e5b8ce80",
+      "message": "validate prompt snapshots and experiment trigger input",
+      "diff": "nonempty"
+    },
+    {
+      "step": 285,
+      "commit": "0b9b078cbf439b48313178b515e27edf46b769b3",
+      "message": "persist trigger inbox and prompt-label ownership",
+      "diff": "nonempty"
+    },
+    {
+      "step": 286,
+      "commit": "49d7cdc43ed01c96aefd0bf481f7f1892ac53644",
+      "message": "accept attested prompt candidates into trigger state",
+      "diff": "nonempty"
+    },
+    {
+      "step": 287,
+      "commit": "b48b69237367bf135773c78cd1dfa07ce184ba4d",
+      "message": "reconcile durable Jenkins trigger dispatch",
+      "diff": "nonempty"
+    },
+    {
+      "step": 288,
+      "commit": "b6a4c88bba0d60358f4db3804ff90db335706990",
+      "message": "expose authenticated Langfuse trigger endpoints",
+      "diff": "nonempty"
+    },
+    {
+      "step": 289,
+      "commit": "47bbfc9953f185b9a0d80e09cd85291abfd38324",
+      "message": "manage candidate a2a preflight",
+      "diff": "nonempty"
+    },
+    {
+      "step": 290,
+      "commit": "11d36d9dbcb6ca1d35bd7554210c3ea1fa825c73",
+      "message": "manage llm ab start",
+      "diff": "nonempty"
+    },
+    {
+      "step": 291,
+      "commit": "c36f944d4d10cbc72fa5505af52c0316ab2ada1d",
+      "message": "manage recommendation langfuse automation",
+      "diff": "nonempty"
+    },
+    {
+      "step": 292,
+      "commit": "5bf188be72f9fc6a41762235e9bd933cdbac7e88",
+      "message": "manage recommendation trigger credentials",
+      "diff": "nonempty"
+    },
+    {
+      "step": 293,
+      "commit": "e0c50fdc371b924b8f09da4883b6ef7c9c32c7c9",
+      "message": "manage coordinator candidate a2a preflight",
+      "diff": "nonempty"
+    },
+    {
+      "step": 294,
+      "commit": "51b62db4b426a93e7d320858d1d040a135e10123",
+      "message": "project redacted deterministic workflow log events",
+      "diff": "nonempty"
+    },
+    {
+      "step": 295,
+      "commit": "95ffedc68c18af551093cad290338c525606dc8e",
+      "message": "render durable experiment and workflow metrics",
+      "diff": "nonempty"
+    },
+    {
+      "step": 296,
+      "commit": "8b55885471dd482af8d3a583a9fecc79c962c783",
+      "message": "persist versioned user and item Redis features",
+      "diff": "nonempty"
+    },
+    {
+      "step": 297,
+      "commit": "84ef1748a98375b3afaa2ea7f393e451a2305c9d",
+      "message": "write Flink feature and quality streams into Iceberg",
+      "diff": "nonempty"
+    },
+    {
+      "step": 298,
+      "commit": "989c68ec53f14be14428d2fedfe98f7d5d40ce18",
+      "message": "write realtime features through bounded async Redis",
+      "diff": "nonempty"
+    },
+    {
+      "step": 299,
+      "commit": "9f8435df97b62679b3673b0e59293dc123f66b9e",
+      "message": "define and write PostgreSQL offline features",
+      "diff": "nonempty"
+    },
+    {
+      "step": 300,
+      "commit": "6edbcc36a14a445d9586e8f157af727612d9fc5d",
+      "message": "persist features and late-event records asynchronously",
+      "diff": "nonempty"
+    },
+    {
+      "step": 301,
+      "commit": "8492a844a59c35316825629649b6ee48f123837d",
+      "message": "assemble online and offline Flink processing graphs",
+      "diff": "nonempty"
+    },
+    {
+      "step": 302,
+      "commit": "d5c49e78ec62c39b183c8738e73e55c960f3a0b5",
+      "message": "validate bronze offline and online store data contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 303,
+      "commit": "adba687e44804e2e9f7f41acabcd0fbd96c744c0",
+      "message": "run bronze-to-silver and gold data products",
+      "diff": "nonempty"
+    },
+    {
+      "step": 304,
+      "commit": "e98cfe260ad910faebc13ed9ed8d56dd847dfbda",
+      "message": "build and validate offline feature tables",
+      "diff": "nonempty"
+    },
+    {
+      "step": 305,
+      "commit": "55fd7729c188aaceadc2a319985dd91833012e78",
+      "message": "describe lakehouse feature and analytics field schemas",
+      "diff": "nonempty"
+    },
+    {
+      "step": 306,
+      "commit": "8b593e2ee08f40e4dec8ba25c8a0c40765833054",
+      "message": "define DataHub datasets products and lineage edges",
+      "diff": "nonempty"
+    },
+    {
+      "step": 307,
+      "commit": "6c1e879a0f5c504855235e0c4b4d859f74229fcb",
+      "message": "synchronize and verify DataHub governance metadata",
+      "diff": "nonempty"
+    },
+    {
+      "step": 308,
+      "commit": "3ce5d8b56d78a948e2642441b79567ef963e7107",
+      "message": "publish persisted dataset validation assertions",
+      "diff": "nonempty"
+    },
+    {
+      "step": 309,
+      "commit": "a997df7dd116acaec1dd92aa710cd8ac3109d0af",
+      "message": "publish catalog lineage and sync metrics",
+      "diff": "nonempty"
+    },
+    {
+      "step": 310,
+      "commit": "6eee9f95c8b22d14eb0a51ed02b71f08fee89295",
+      "message": "recover and materialize Feast feature watermarks",
+      "diff": "nonempty"
+    },
+    {
+      "step": 311,
+      "commit": "a7aa75dff1ba9510f0af2e9a101cb538d75166d0",
+      "message": "retain guarded adapter capacity maintenance tools",
+      "diff": "nonempty"
+    },
+    {
+      "step": 312,
+      "commit": "e3b36c1bec65afdf905bdd2b70b941a61633a334",
+      "message": "retain zero-traffic failed-candidate quarantine tools",
+      "diff": "nonempty"
+    },
+    {
+      "step": 313,
+      "commit": "0b77e7a9deab1d048f80423a7f3c3696b8035e6f",
+      "message": "retain source-specific candidate recovery utilities",
+      "diff": "nonempty"
+    },
+    {
+      "step": 314,
+      "commit": "27f905c2f8e5727b54ed91d12bd871e8d6a371a4",
+      "message": "configure the npm frontend toolchain",
+      "diff": "nonempty"
+    },
+    {
+      "step": 315,
+      "commit": "7e8c0018126884b87ad198810c774bad6a8de077",
+      "message": "export demo OpenAPI and generated frontend types",
+      "diff": "nonempty"
+    },
+    {
+      "step": 316,
+      "commit": "d4add99857ce9a077058c715318cd7ff0e4d9f15",
+      "message": "add typed demo API requests",
+      "diff": "nonempty"
+    },
+    {
+      "step": 317,
+      "commit": "0e6f67d26ba6bf04713725dafb964db3832c0558",
+      "message": "mount the React query application",
+      "diff": "nonempty"
+    },
+    {
+      "step": 318,
+      "commit": "b864d0239338824de7d795d975904e364c2496dd",
+      "message": "establish demo typography and global design tokens",
+      "diff": "nonempty"
+    },
+    {
+      "step": 319,
+      "commit": "00e7b946949c40ea3991999278cffe84e77951d2",
+      "message": "load and select active catalog users",
+      "diff": "nonempty"
+    },
+    {
+      "step": 320,
+      "commit": "0f0d3f6e77120b138bee3be23ec6068e4f0bb89d",
+      "message": "render the live product catalog",
+      "diff": "nonempty"
+    },
+    {
+      "step": 321,
+      "commit": "a22664c42db2a32f80ad9a1886036b7e119d3544",
+      "message": "persist browser interaction session identity",
+      "diff": "nonempty"
+    },
+    {
+      "step": 322,
+      "commit": "5f6321b48538c70663353c2e01a0247f8d95d7ba",
+      "message": "send correlated product view events",
+      "diff": "nonempty"
+    },
+    {
+      "step": 323,
+      "commit": "b3b184996797dc85b9b4c96f4f8e51083b214e77",
+      "message": "track cart additions and purchase quantities",
+      "diff": "nonempty"
+    },
+    {
+      "step": 324,
+      "commit": "d9363ef1c851658a1718cc78ee252e57cc5a92fa",
+      "message": "show interaction event timeline",
+      "diff": "nonempty"
+    },
+    {
+      "step": 325,
+      "commit": "bdba97d7322b3c8cdfac30e07fc62efbcef5b434",
+      "message": "poll online feature propagation status",
+      "diff": "nonempty"
+    },
+    {
+      "step": 326,
+      "commit": "308e02f7c8204cb99c554c4feb1e18aa691f1726",
+      "message": "request personalized ranking for the active user",
+      "diff": "nonempty"
+    },
+    {
+      "step": 327,
+      "commit": "5386649984c978440f5892829e193a412823dc17",
+      "message": "render ranked recommendation cards",
+      "diff": "nonempty"
+    },
+    {
+      "step": 328,
+      "commit": "1c20c99a34cb7f66baa499d9815d8898e56fe822",
+      "message": "complete responsive lab layout and focus styles",
+      "diff": "nonempty"
+    },
+    {
+      "step": 329,
+      "commit": "23ec1a2e05a4ad4b4304f8b3c1c98effc67a051b",
+      "message": "cover demo catalog and recommendation interactions",
+      "diff": "nonempty"
+    },
+    {
+      "step": 330,
+      "commit": "f25e00156ccc7fd418b6d217e60480ab2e8637e3",
+      "message": "serve the production demo through nginx",
+      "diff": "nonempty"
+    },
+    {
+      "step": 331,
+      "commit": "812dbcef4a403db07616aace5cb4239c210106a3",
+      "message": "define agent tool contracts and auth rotation versions",
+      "diff": "nonempty"
+    },
+    {
+      "step": 332,
+      "commit": "25791e1207f56339d6d54876c59a80893a0f7a3d",
+      "message": "restore reviewed Qwen model onboarding catalogs",
+      "diff": "nonempty"
+    },
+    {
+      "step": 333,
+      "commit": "b25383daef3819659910b010be4a8e61dcb401e8",
+      "message": "configure CPU model gateway serving profiles",
+      "diff": "nonempty"
+    },
+    {
+      "step": 334,
+      "commit": "a349169a185896a5f5b7e6a958ac45a6cfb4dfc2",
+      "message": "configure stock kagent runtime integration",
+      "diff": "nonempty"
+    },
+    {
+      "step": 335,
+      "commit": "a20d344535fc0a5f3dcc53a54192cf5743abd6e9",
+      "message": "configure agent registry bootstrap",
+      "diff": "nonempty"
+    },
+    {
+      "step": 336,
+      "commit": "e92f4973b28641da249f5109339f3b76ca864753",
+      "message": "configure Langfuse tracing deployment profiles",
+      "diff": "nonempty"
+    },
+    {
+      "step": 337,
+      "commit": "0d9af0d0c04077a3109293b945de6cd01f0cacbe",
+      "message": "configure Vault raft and KMS integration",
+      "diff": "nonempty"
+    },
+    {
+      "step": 338,
+      "commit": "78e867f4a07150bcdbbc3715976add76cfe88b70",
+      "message": "restore versioned workflow evaluation case suites",
+      "diff": "nonempty"
+    },
+    {
+      "step": 339,
+      "commit": "5081d0f16114954f48e63bf94b310e3cb7731785",
+      "message": "restore recommendation compatibility fixtures",
+      "diff": "nonempty"
+    },
+    {
+      "step": 340,
+      "commit": "158e3b6bcc8832e658cf9eb418bf9dc12e4fae57",
+      "message": "restore small-model compatibility cases",
+      "diff": "nonempty"
+    },
+    {
+      "step": 341,
+      "commit": "555fcdfd28658b63a8d58c0bac03b6dc9a5bfc60",
+      "message": "restore agent rollout and onboarding policies",
+      "diff": "nonempty"
+    },
+    {
+      "step": 342,
+      "commit": "5d25585197932184cabc043b7274b85f052f1ed1",
+      "message": "configure the analytics dbt project",
+      "diff": "nonempty"
+    },
+    {
+      "step": 343,
+      "commit": "c15b6b5ccef6b878e56f4314a29f8e6400784c1a",
+      "message": "declare silver analytics source contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 344,
+      "commit": "05c235052135f89b67717c8e6e90e0e6b2137e76",
+      "message": "normalize silver events into analytics staging views",
+      "diff": "nonempty"
+    },
+    {
+      "step": 345,
+      "commit": "6a55f79c2c05100449b57e50253e1683edd5d3c5",
+      "message": "derive impression outcomes and session funnels",
+      "diff": "nonempty"
+    },
+    {
+      "step": 346,
+      "commit": "83d05d9bdb06dbb037ae51a9d5256915fa8559da",
+      "message": "build product and recommendation facts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 347,
+      "commit": "254c704539cea353686ce9a0cf368ed4c8008488",
+      "message": "aggregate recommendation experiment business metrics",
+      "diff": "nonempty"
+    },
+    {
+      "step": 348,
+      "commit": "4670f33543df6db64048915824280753bcc6767d",
+      "message": "validate analytics model keys and relations",
+      "diff": "nonempty"
+    },
+    {
+      "step": 349,
+      "commit": "9a7bf84f5a037979abbb0bbad8f90dac8d8a2999",
+      "message": "package airflow runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 350,
+      "commit": "5e5958259a850666b7650b3e77677428b250a7ef",
+      "message": "package analytics dbt runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 351,
+      "commit": "d505cd07791a0f18e66d3ecd58a6c8193793af22",
+      "message": "package analytics superset runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 352,
+      "commit": "9025e6b97d540e3618955f708c544c857f16ca03",
+      "message": "package base python runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 353,
+      "commit": "2cec73c38036482291733afe5e697a112c99bde8",
+      "message": "package datahub ops runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 354,
+      "commit": "4cec730607ce3e044ceb9e089fa451ea98cfdf0b",
+      "message": "package demo api runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 355,
+      "commit": "95d9b4ab87215a58cee43b910ae19477da7f959a",
+      "message": "package demo web runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 356,
+      "commit": "aa9a3dfc9dc032a24fb659c0b1e46fad085a626d",
+      "message": "package drift retrain runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 357,
+      "commit": "bc1073bcf78d135e35132efc01fe1dd521b801b2",
+      "message": "package feature rag mcp runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 358,
+      "commit": "122c20f4c4269270d3e63e16812089bf25e582bf",
+      "message": "package feature store runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 359,
+      "commit": "171d98622bbe2ea37ab2a796e00edba3711383ca",
+      "message": "package flink runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 360,
+      "commit": "431938d3c63e3db2aef19f92d8f1a38179ef1615",
+      "message": "package inference api runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 361,
+      "commit": "1747e7e6e07bab47b0a536b97ad6a64f24bab731",
+      "message": "package ingestion runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 362,
+      "commit": "a3df7ddccb97b621b3053ffe6627f012f92d40a2",
+      "message": "package kafka connect runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 363,
+      "commit": "603afa742940b136093f0b3facddaf888b0b4e2e",
+      "message": "package kafka connect admin runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 364,
+      "commit": "8adae53537e22130b612a53d17b27f06d8ce3636",
+      "message": "package mlflow runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 365,
+      "commit": "984b445ec9deb64ddaec311e575a25060ece1f37",
+      "message": "package mlops training runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 366,
+      "commit": "65be006a3c6759081c1ee9fb7304af9033171952",
+      "message": "package online feature api runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 367,
+      "commit": "df01d87e873ecc363f8f2ed236f11c207c9b1e75",
+      "message": "package rag admin runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 368,
+      "commit": "21a18ab74ad4185785aba5683b9501d65c80008f",
+      "message": "package rag api runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 369,
+      "commit": "6bbc6d4ac5ff94c99a48d1094625149d69772929",
+      "message": "package rag model e5 runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 370,
+      "commit": "ad56dc7430423d5f34cc7b0ba8c81d7c96097655",
+      "message": "package rag indexer runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 371,
+      "commit": "7020e6989014a0a0c0e82ec37a7a49306e0c0ef2",
+      "message": "package recommendation mcp runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 372,
+      "commit": "184a5eb3e1a67e535b50f7e7d4ec295252efa5a0",
+      "message": "package spark runtime runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 373,
+      "commit": "1c50869366539e8b30bf23967078ddba7770abef",
+      "message": "package spark analytics runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 374,
+      "commit": "c24095d49a0379025f6a529770987dbd900d5ec7",
+      "message": "package spark data runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 375,
+      "commit": "18fd437dda8dbde5e3bebccca2aa7db34343183e",
+      "message": "package spark ml runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 376,
+      "commit": "00964b7fc1fab76405b50ee8a039cbdd642c63a8",
+      "message": "register image schemas and dependency build order",
+      "diff": "nonempty"
+    },
+    {
+      "step": 377,
+      "commit": "1a5939f2ad51ae067cba4197ac45193e9d4f7395",
+      "message": "deploy runtime with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 378,
+      "commit": "d731086dee5983ddc43a34ca7c132188f6d2de42",
+      "message": "deploy data config with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 379,
+      "commit": "2bd1038ad998d3c5ed97185d39f93eba275d8f34",
+      "message": "deploy source store with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 380,
+      "commit": "5ce061d4d3928251e044dfd77d3fd178377bf296",
+      "message": "deploy data lakehouse with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 381,
+      "commit": "14c54b3f69f3acf792305fb09f4c73cee5ea1228",
+      "message": "deploy feature store with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 382,
+      "commit": "030b3f72989d4c1deb0f340b980efebb46fdb538",
+      "message": "deploy event stream with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 383,
+      "commit": "a917aa6261f233994d9606aab8a1bc81088c80e8",
+      "message": "deploy kafka connect with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 384,
+      "commit": "53c65ce5d3c616848d987894bc5ea015fd4d2989",
+      "message": "deploy streaming with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 385,
+      "commit": "acc063e01f317fbd48a4e99b9998a04b1151dff4",
+      "message": "deploy airflow with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 386,
+      "commit": "33e1f7ab57c1cc45a65d65d9881a09c406922ae7",
+      "message": "deploy milvus with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 387,
+      "commit": "feff0a1e429c53d0006ba22e448001fd2005b1ec",
+      "message": "deploy rag data with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 388,
+      "commit": "8d027dca917a11c4b9fb396f522e37aa86ccdd19",
+      "message": "deploy mlflow stack with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 389,
+      "commit": "f5ed8398d76c8d5b2915ffc15065d5be59ae32d3",
+      "message": "deploy ray cluster with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 390,
+      "commit": "0027f1d1508f0a83ad61dfde3592f25cdf8307a7",
+      "message": "deploy serving with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 391,
+      "commit": "f59cbbc667259a554080c0bb3a5d4f8b03c1930a",
+      "message": "deploy online feature api with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 392,
+      "commit": "5d4fee564b7f4d63cf549ef22f5eedd2deb2a779",
+      "message": "deploy inference api with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 393,
+      "commit": "f6e5f1ad649fcefdb4e3cb4cf2cf00ec157b5658",
+      "message": "deploy rag api with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 394,
+      "commit": "5ce5c9b531687b5fdfae1093cc026eef83ed8de8",
+      "message": "deploy analytics with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 395,
+      "commit": "7c3af675cbf8622ff79eec89be25d23ce61f80a4",
+      "message": "deploy feature rag mcp with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 396,
+      "commit": "f2ed258bc0b5fe3c13f68b39c77f48377b6cbaaf",
+      "message": "deploy recommendation mcp with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 397,
+      "commit": "d91dc20a9129a7a9218590b5496fbb288d02a09f",
+      "message": "deploy agent registry postgres with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 398,
+      "commit": "f20552d3df44dc6a0aeb0399a7c96e8e244f464b",
+      "message": "deploy global model config with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 399,
+      "commit": "f5d5d956fefb80a69274ab3195576aca93a7fdec",
+      "message": "deploy kagent agent with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 400,
+      "commit": "7ae6ec1cfd7ba7b9f82c6bfca19e296458467b90",
+      "message": "deploy recommendation agent with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 401,
+      "commit": "e87d3cc3f432f2531fbba157b0e2d10c7ea7287b",
+      "message": "deploy coordinator agent with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 402,
+      "commit": "5c349d04f0817a39cba39c872e5702706d3431ef",
+      "message": "deploy llm serving with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 403,
+      "commit": "1f16190029f4fe4d501c9f3be248757862aaf653",
+      "message": "deploy llm ab with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 404,
+      "commit": "fad4530a59e758649ab1a46f540cf7466b3eb299",
+      "message": "deploy workflow ab with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 405,
+      "commit": "a32d3aee7416a2a43f16f9c0dc7c3ac8c699db8e",
+      "message": "deploy demo web with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 406,
+      "commit": "9d747cfa47522ff4d222c47ccf827d418a910def",
+      "message": "deploy security with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 407,
+      "commit": "d2b46ef4c33235f4a7943a356c73fc457d06204b",
+      "message": "deploy observability with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 408,
+      "commit": "f17e4f800721afb9ccc6f36ffdd3f10539e610db",
+      "message": "deploy gateway with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 409,
+      "commit": "6d16af8183081f192ba436445dad7e629316af3a",
+      "message": "deploy ci with Helm",
+      "diff": "nonempty"
+    },
+    {
+      "step": 410,
+      "commit": "60de4386855c16244f01c0e753a7a701dc01a3a6",
+      "message": "configure the upstream DataHub prerequisites",
+      "diff": "nonempty"
+    },
+    {
+      "step": 411,
+      "commit": "147c69005ddb9922d5852e5fbe0f5215878a028c",
+      "message": "enable cloud API and logging resources",
+      "diff": "nonempty"
+    },
+    {
+      "step": 412,
+      "commit": "3a124563c594d607af69820d6c8259f47ae06a2c",
+      "message": "define GCP network and private service connectivity",
+      "diff": "nonempty"
+    },
+    {
+      "step": 413,
+      "commit": "0854c1aef9dd703bfe17589632c6a56aa9f74e2e",
+      "message": "define immutable image and artifact storage",
+      "diff": "nonempty"
+    },
+    {
+      "step": 414,
+      "commit": "e737f4d26a64a897523f4fdb3630b30e9e39e744",
+      "message": "define quota-aware GKE node pools",
+      "diff": "nonempty"
+    },
+    {
+      "step": 415,
+      "commit": "3aad1fd4020c8578ab17afd01737b37e9af6b9ac",
+      "message": "compose the Kubernetes platform infrastructure",
+      "diff": "nonempty"
+    },
+    {
+      "step": 416,
+      "commit": "4c747158833fa51a8a39ecc5440049089dbded1c",
+      "message": "wire owner-specific Terraform root configuration",
+      "diff": "nonempty"
+    },
+    {
+      "step": 417,
+      "commit": "297e34a996518f04cdbbd049a7418f8dbd6bec2a",
+      "message": "configure agent registry artifacts for component releases",
+      "diff": "nonempty"
+    },
+    {
+      "step": 418,
+      "commit": "3902b82b83951394ecbeef38844f582025f2a979",
+      "message": "configure ci config requirements for component releases",
+      "diff": "nonempty"
+    },
+    {
+      "step": 419,
+      "commit": "8b1399882aa71c56ad14ca0cb384d9ee1ed540a8",
+      "message": "configure ci environments for component releases",
+      "diff": "nonempty"
+    },
+    {
+      "step": 420,
+      "commit": "33fab3e7aedfd2515adcaa339858b683410ee96c",
+      "message": "configure components for component releases",
+      "diff": "nonempty"
+    },
+    {
+      "step": 421,
+      "commit": "66ffab29968fb32a78a288a2c9b7164635c586c9",
+      "message": "configure deploy units for component releases",
+      "diff": "nonempty"
+    },
+    {
+      "step": 422,
+      "commit": "27f9d9d01ec6a7be77b61b689b0a34acd0411bdf",
+      "message": "configure gcp production for component releases",
+      "diff": "nonempty"
+    },
+    {
+      "step": 423,
+      "commit": "2d995e7ae54681c7b41dabacc9193055fdbcee40",
+      "message": "provide common shell helpers",
+      "diff": "nonempty"
+    },
+    {
+      "step": 424,
+      "commit": "ac64ea26daaf0e42777b1dabd17870ef0a512e7f",
+      "message": "provide config shell helpers",
+      "diff": "nonempty"
+    },
+    {
+      "step": 425,
+      "commit": "c29321f3fef5148d3c06b83a0fc601d3643a2053",
+      "message": "provide helm shell helpers",
+      "diff": "nonempty"
+    },
+    {
+      "step": 426,
+      "commit": "f76b072206ade99fa571ac514f999c07751a0cf2",
+      "message": "provide image manifest shell helpers",
+      "diff": "nonempty"
+    },
+    {
+      "step": 427,
+      "commit": "e2f71fb325beb6c2c39b35901d6266812df8c24a",
+      "message": "provide registry shell helpers",
+      "diff": "nonempty"
+    },
+    {
+      "step": 428,
+      "commit": "5d3f8b23268d77d14b763d234bb8f6ceb05dfdd1",
+      "message": "provide release gate shell helpers",
+      "diff": "nonempty"
+    },
+    {
+      "step": 429,
+      "commit": "d3016a5b4f7e8683f5fe37f57f71b22db39f6469",
+      "message": "provide runtime shell helpers",
+      "diff": "nonempty"
+    },
+    {
+      "step": 430,
+      "commit": "a50abf84ba12314c0b11cc05ec4d45a7344866a5",
+      "message": "implement artifact image and pipeline packaging",
+      "diff": "nonempty"
+    },
+    {
+      "step": 431,
+      "commit": "db868899b1dfaa4014a29d076a21681e93f7f6b6",
+      "message": "dispatch profile-specific component validation",
+      "diff": "nonempty"
+    },
+    {
+      "step": 432,
+      "commit": "25ccb4a35f39b4da51d1bba83997fbf2abca33cb",
+      "message": "run component smoke and contract suites",
+      "diff": "nonempty"
+    },
+    {
+      "step": 433,
+      "commit": "1eabdaf14bc8fae1e0c6db9f1f6b6de386a1190e",
+      "message": "coordinate transactional CI release entrypoints",
+      "diff": "nonempty"
+    },
+    {
+      "step": 434,
+      "commit": "94b560e14a518b60b76d7dc7658efe335ef1487e",
+      "message": "maintain bounded CI storage and caches",
+      "diff": "nonempty"
+    },
+    {
+      "step": 435,
+      "commit": "0a7b3b419675a750c70d1e31d7cec660cf952e6f",
+      "message": "orchestrate agentic deployment",
+      "diff": "nonempty"
+    },
+    {
+      "step": 436,
+      "commit": "bf27f46eeed387d0e93fb49243e4beaef261891e",
+      "message": "coordinate agent MCP registry and rotation deployments",
+      "diff": "nonempty"
+    },
+    {
+      "step": 437,
+      "commit": "699bccceaa572d6cded38aa0d6bc0732bd5cd30f",
+      "message": "orchestrate analytics deployment",
+      "diff": "nonempty"
+    },
+    {
+      "step": 438,
+      "commit": "d08ba2a8ec847ef2ca866da547e4c90193f7ede7",
+      "message": "orchestrate datahub deployment",
+      "diff": "nonempty"
+    },
+    {
+      "step": 439,
+      "commit": "5e153f75346141e6ba3b3f6e67aec510d19772c8",
+      "message": "orchestrate demo deployment",
+      "diff": "nonempty"
+    },
+    {
+      "step": 440,
+      "commit": "18535111b19f197a380b2f3a3aeb5f9d4ebc5340",
+      "message": "orchestrate feast deployment",
+      "diff": "nonempty"
+    },
+    {
+      "step": 441,
+      "commit": "4617883696412136e02340f35bd7a768b46c0ea7",
+      "message": "orchestrate global model config locked deployment",
+      "diff": "nonempty"
+    },
+    {
+      "step": 442,
+      "commit": "7b83cc0372c00dc744cf168364bff6de2fdf6ec5",
+      "message": "orchestrate ml platform deployment",
+      "diff": "nonempty"
+    },
+    {
+      "step": 443,
+      "commit": "cfb07e5456c9b278529c41bde628e4e3156c30cd",
+      "message": "orchestrate gcp deployment",
+      "diff": "nonempty"
+    },
+    {
+      "step": 444,
+      "commit": "c1777335743725a726aecdaa8b85e12eb4f41adf",
+      "message": "orchestrate rag deployment",
+      "diff": "nonempty"
+    },
+    {
+      "step": 445,
+      "commit": "37d6dba1f035506679e1c09feb9ae9936ad36cf9",
+      "message": "coordinate staged RAG deployment and rollback",
+      "diff": "nonempty"
+    },
+    {
+      "step": 446,
+      "commit": "627d139bb3bc8dfffe3162971998b984fcefab41",
+      "message": "orchestrate release unit runtime deployment",
+      "diff": "nonempty"
+    },
+    {
+      "step": 447,
+      "commit": "5fdf0c4853b0cd25ddb6e2b9d9c11f3e79a72412",
+      "message": "orchestrate rollout deployment",
+      "diff": "nonempty"
+    },
+    {
+      "step": 448,
+      "commit": "a004078d8f288219ebf29e8ae3068fe99fee5d2f",
+      "message": "orchestrate runtime deployment",
+      "diff": "nonempty"
+    },
+    {
+      "step": 449,
+      "commit": "c7135f630405f148ffeb1cea56cbf01792e8b343",
+      "message": "orchestrate serving deployment",
+      "diff": "nonempty"
+    },
+    {
+      "step": 450,
+      "commit": "b97321f41604ecbdb633e6c228316f5bc2be1f38",
+      "message": "orchestrate upload kfp package deployment",
+      "diff": "nonempty"
+    },
+    {
+      "step": 451,
+      "commit": "d2e451a0fece747dbb0cc84a95251de0f9ec0fd2",
+      "message": "coordinate component pipeline stages",
+      "diff": "nonempty"
+    },
+    {
+      "step": 452,
+      "commit": "0233ed8e0214d3d017e6dfd2edea289b7ad59dfd",
+      "message": "define GlobalModelConfig Jenkins workflow",
+      "diff": "nonempty"
+    },
+    {
+      "step": 453,
+      "commit": "cc26b7eab64d48c3ff9668b7aed4ed55e4dd2314",
+      "message": "define KServeModelCD Jenkins workflow",
+      "diff": "nonempty"
+    },
+    {
+      "step": 454,
+      "commit": "5c8dc2afe14e71dbea4907b64e6c898961c19c7d",
+      "message": "define LLMAgentCD Jenkins workflow",
+      "diff": "nonempty"
+    },
+    {
+      "step": 455,
+      "commit": "d45695479b2d4e47e29c9874fb113eb06e1da0a9",
+      "message": "define LLMCandidateOnboard Jenkins workflow",
+      "diff": "nonempty"
+    },
+    {
+      "step": 456,
+      "commit": "b8d12923f1ab1e3dcf6a156d764654f721664235",
+      "message": "define LLMWorkflowCD Jenkins workflow",
+      "diff": "nonempty"
+    },
+    {
+      "step": 457,
+      "commit": "3ad87e2ff83fa717db1b9ee5b3301ed043ff8f7d",
+      "message": "define LLMWorkflowEvaluationPrepare Jenkins workflow",
+      "diff": "nonempty"
+    },
+    {
+      "step": 458,
+      "commit": "ba08750bdd18164ded470813fa0ec4129eabcd07",
+      "message": "define RecommendationBaselineMigration Jenkins workflow",
+      "diff": "nonempty"
+    },
+    {
+      "step": 459,
+      "commit": "4c0bd15807194106551a0c394f718a55c705649c",
+      "message": "define ServingMutation Jenkins workflow",
+      "diff": "nonempty"
+    },
+    {
+      "step": 460,
+      "commit": "72c1a5641ff9a691984f839330e3cee8f179009b",
+      "message": "implement MCP credential rotation operations",
+      "diff": "nonempty"
+    },
+    {
+      "step": 461,
+      "commit": "831243c938a204ed946fa5dc6dfeb80c6e042ca6",
+      "message": "retain guarded data and resource ownership migrations",
+      "diff": "nonempty"
+    },
+    {
+      "step": 462,
+      "commit": "2e72eb7a385aeed9e4f7215bf1e00152f362d758",
+      "message": "retain substrate record maintenance utilities",
+      "diff": "nonempty"
+    },
+    {
+      "step": 463,
+      "commit": "4acc10a391655e57c35dda091353214f52652a5e",
+      "message": "provide data generation and RAG job launchers",
+      "diff": "nonempty"
+    },
+    {
+      "step": 464,
+      "commit": "294ed2a1617a1a504ade2cd0110b1efc7df4dbd7",
+      "message": "route global model changes through release locks",
+      "diff": "nonempty"
+    },
+    {
+      "step": 465,
+      "commit": "51778424ab4cc9b430ad29de8931e3427a0cfa15",
+      "message": "define reproducible Cloud Build recovery packages",
+      "diff": "nonempty"
+    },
+    {
+      "step": 466,
+      "commit": "35433241d71ce0e31acfc3b9384626140cd4d404",
+      "message": "support bootstrap vault cloud operations",
+      "diff": "nonempty"
+    },
+    {
+      "step": 467,
+      "commit": "65067c94783f5464130b8311aec258ac6a262039",
+      "message": "support build llamacpp b8646 cloud operations",
+      "diff": "nonempty"
+    },
+    {
+      "step": 468,
+      "commit": "70949cae42a94a34f0baebb9d0c701ed96585c49",
+      "message": "support configure gateway dns cloud operations",
+      "diff": "nonempty"
+    },
+    {
+      "step": 469,
+      "commit": "925aae970730e4562dbb7e20adc5cf8c9809a929",
+      "message": "support configure langfuse dns cloud operations",
+      "diff": "nonempty"
+    },
+    {
+      "step": 470,
+      "commit": "93c394c56501e045b2477240bdb934a5011654de",
+      "message": "support forced tool diagnostic cloud operations",
+      "diff": "nonempty"
+    },
+    {
+      "step": 471,
+      "commit": "fe89ed53490b5db7a92330815bb4717947ba4f70",
+      "message": "support install llm gateway crds cloud operations",
+      "diff": "nonempty"
+    },
+    {
+      "step": 472,
+      "commit": "a6b8dd80caf8844c5714ff49e5819d36d85a68b0",
+      "message": "support jenkins workflow access cloud operations",
+      "diff": "nonempty"
+    },
+    {
+      "step": 473,
+      "commit": "932a89cd11640257cc85a7d5c4c06ece43ae34c3",
+      "message": "support services power cloud operations",
+      "diff": "nonempty"
+    },
+    {
+      "step": 474,
+      "commit": "7d142fd91c8e89ef108fa17a01fc05f57a804d0b",
+      "message": "support terraform gcp cloud operations",
+      "diff": "nonempty"
+    },
+    {
+      "step": 475,
+      "commit": "50eb0802eea89e867bd509a13e8817d180ca5fad",
+      "message": "support train model cloud operations",
+      "diff": "nonempty"
+    },
+    {
+      "step": 476,
+      "commit": "dc7ca0b3b0b8fabf76d514b2b6af2b485db700e9",
+      "message": "support trigger full jenkins cloud operations",
+      "diff": "nonempty"
+    },
+    {
+      "step": 477,
+      "commit": "899070e9f9bb2a36a674a33e569ba4b95cd36747",
+      "message": "verify agent registry smoke deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 478,
+      "commit": "60840b7319a699f5eab33167cadc1ffae88d3042",
+      "message": "verify agent substrate warmup benchmark deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 479,
+      "commit": "84b88247f33fba6b870d34b8578c51fde1843bc9",
+      "message": "verify agentic autoscale capture deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 480,
+      "commit": "3be295d8beb38a3eb7fe3de8e3882ddfdf06746b",
+      "message": "verify agentic context autoscale deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 481,
+      "commit": "01b48bae4710db64090a14b62b0a9b27b8c8356c",
+      "message": "verify agentic context registry smoke deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 482,
+      "commit": "02b6b55afa2b86a106796016a277fb2329f2d692",
+      "message": "verify agentic context smoke deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 483,
+      "commit": "a839968f6693868616aba4407e2aa4d8633d9b37",
+      "message": "verify ai observability proof deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 484,
+      "commit": "58f03f500b9879a4a14d96a8ccc895f7df7f4e98",
+      "message": "verify coordinator agentic autoscale deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 485,
+      "commit": "87303112b9b4dbc4e2e44f6346e8a21e8459d187",
+      "message": "verify coordinator agentic registry smoke deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 486,
+      "commit": "6d2aaac8142fec2f3bd5815ff2471dbd6fa880c0",
+      "message": "verify coordinator agentic smoke deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 487,
+      "commit": "c94788503f5a282d272f073d2b7d57bce5ad9fd0",
+      "message": "verify llm inference benchmark deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 488,
+      "commit": "e20299f5dd8246b5d1456e79f169ecd0458ca6a5",
+      "message": "verify llm inference smoke deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 489,
+      "commit": "15f68e225e39af48f4085c180744b9d8ca9ef3aa",
+      "message": "verify mcp auth continuous probe deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 490,
+      "commit": "b2074df6ea3fb7ef51f2928c1646fef6ef8f2172",
+      "message": "verify mcp auth fresh a2a smoke deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 491,
+      "commit": "aaa46aebfe849ad8a0d59308d2e1fdff909b2947",
+      "message": "verify mcp auth retirement gate deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 492,
+      "commit": "ac899c5dab0d269160c5b6d45719ec18b1d8f8a4",
+      "message": "verify mcp auth rotation gate deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 493,
+      "commit": "f9cbea629a4d803db3d899e73746e9797c0ce22b",
+      "message": "verify mcp auth rotation matrix deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 494,
+      "commit": "f04fb3ae3a23f16cd40a1a2effb6098429e5e2d3",
+      "message": "verify recommendation agentic autoscale deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 495,
+      "commit": "f7df28ce0525ad9afcde50a17208c0458d162ccf",
+      "message": "verify recommendation agentic latency deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 496,
+      "commit": "0d2135a957ce73da1a9462ceb302a9a25b5d2ff5",
+      "message": "verify recommendation agentic registry smoke deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 497,
+      "commit": "9f38051c12f0a02a1d03bb21eb91a2202e67d217",
+      "message": "verify recommendation agentic smoke deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 498,
+      "commit": "330ff1ffb6fae0e8dcd3a3d02945b5f8f54f52b8",
+      "message": "verify serving autoscale load test deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 499,
+      "commit": "4bcf0e71cdeb0936badb00eb6ac5954ee5d7e298",
+      "message": "verify substrate status gate deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 500,
+      "commit": "0251b75a4fe41a86bfa6bc868895e93db86f34d6",
+      "message": "verify verify gcp full stack deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 501,
+      "commit": "e167a8cd5db00d29ac6b3c363706147d408d3e68",
+      "message": "verify verify gcp stack deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 502,
+      "commit": "0286d236d474d80207a5603030fa9360f143dee6",
+      "message": "verify verify public agent surfaces deployment behavior",
+      "diff": "nonempty"
+    },
+    {
+      "step": 503,
+      "commit": "07d1b2e9dda1f2921652b7033629c419838280e7",
+      "message": "restore test fixtures and isolation helpers",
+      "diff": "nonempty"
+    },
+    {
+      "step": 504,
+      "commit": "7dad974ba9bcd9b42c9f005a127108a28a5070da",
+      "message": "verify deterministic generation and drift",
+      "diff": "nonempty"
+    },
+    {
+      "step": 505,
+      "commit": "408ea3c7e6ef7f4603cadb26066bf6c26bc1acec",
+      "message": "verify Feast registry state and definitions",
+      "diff": "nonempty"
+    },
+    {
+      "step": 506,
+      "commit": "a944b132f511df3ae5d9675dc51efa44fe4773a4",
+      "message": "verify lakehouse analytics synchronization",
+      "diff": "nonempty"
+    },
+    {
+      "step": 507,
+      "commit": "45d91559b30c82af2e9188ef2110b6d4b6f8e007",
+      "message": "verify training lineage and model promotion",
+      "diff": "nonempty"
+    },
+    {
+      "step": 508,
+      "commit": "9acb4f17762193e1a4841c91528ea1f414446bd0",
+      "message": "verify telemetry redaction and dashboards",
+      "diff": "nonempty"
+    },
+    {
+      "step": 509,
+      "commit": "6f9c9ab8da94f5e875a90260a2118a7a8488ab6d",
+      "message": "add run mutation verification tooling",
+      "diff": "nonempty"
+    },
+    {
+      "step": 510,
+      "commit": "439b9e6bb4e022d5ec0bed5fed62c1a4eef58464",
+      "message": "verify load payload oracles",
+      "diff": "nonempty"
+    },
+    {
+      "step": 511,
+      "commit": "56e2bde99e3d9918288d8d4f3f02fa06c855698d",
+      "message": "verify batch and streaming data product contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 512,
+      "commit": "51bd0a6e4efa9f2529ae10f0ba3a4ced23a5a8b6",
+      "message": "verify transactional CI and global model dispatch",
+      "diff": "nonempty"
+    },
+    {
+      "step": 513,
+      "commit": "102f9646227f9b0f3e5318ab57686388bbd5d28b",
+      "message": "verify agent rollout capacity and recovery guards",
+      "diff": "nonempty"
+    },
+    {
+      "step": 514,
+      "commit": "c620045bc68029c6299eb25bd1b59adcdca0ee74",
+      "message": "verify cicd configuration",
+      "diff": "nonempty"
+    },
+    {
+      "step": 515,
+      "commit": "03ade7798e51896c676165a7cc0158654512b2c3",
+      "message": "verify agent evaluation and workflow evidence",
+      "diff": "nonempty"
+    },
+    {
+      "step": 516,
+      "commit": "8fbfd17bb7cd11d45b72dcb5579cc631f7146d4a",
+      "message": "verify demo web routing",
+      "diff": "nonempty"
+    },
+    {
+      "step": 517,
+      "commit": "5c9e9ab2969b9843ea65306d2f75fe15de66ca0a",
+      "message": "verify detect changed components",
+      "diff": "nonempty"
+    },
+    {
+      "step": 518,
+      "commit": "129a5c03ac45944d56269c853bfdb513858c1525",
+      "message": "verify image catalog",
+      "diff": "nonempty"
+    },
+    {
+      "step": 519,
+      "commit": "4f7eb893a5bb3adbde0495dea00957efca6816f7",
+      "message": "verify llm ab adapter",
+      "diff": "nonempty"
+    },
+    {
+      "step": 520,
+      "commit": "9c2a2f5e76fce7ad1cde962796bafe034f9463fd",
+      "message": "verify llm ab controller",
+      "diff": "nonempty"
+    },
+    {
+      "step": 521,
+      "commit": "751dcee8c749e04d7da6c3cc27fbf24b1c799c45",
+      "message": "verify llm ab provision",
+      "diff": "nonempty"
+    },
+    {
+      "step": 522,
+      "commit": "5ead1307f7bb43e6d47dc3df8ae3fb70333889c4",
+      "message": "verify llm ab start",
+      "diff": "nonempty"
+    },
+    {
+      "step": 523,
+      "commit": "62c59589daf859a01f354336be79c302a4287e57",
+      "message": "verify llm agent cd",
+      "diff": "nonempty"
+    },
+    {
+      "step": 524,
+      "commit": "6eb32de67fdc5693b988a77ae01c97a62903b030",
+      "message": "verify llm envoy weights",
+      "diff": "nonempty"
+    },
+    {
+      "step": 525,
+      "commit": "d6646d3bab0306cf7fa893e0e2450c4168e865a1",
+      "message": "verify llm release guard",
+      "diff": "nonempty"
+    },
+    {
+      "step": 526,
+      "commit": "578a442020af352a1e0493341b6024e81a2057f6",
+      "message": "verify llm small profile",
+      "diff": "nonempty"
+    },
+    {
+      "step": 527,
+      "commit": "76434716386df46777e2c3c8e531b4a578c73183",
+      "message": "verify llm workflow",
+      "diff": "nonempty"
+    },
+    {
+      "step": 528,
+      "commit": "22e386c370b0325ed9098c0a16d4ac711943e074",
+      "message": "verify mcp auth rotation gate runtime",
+      "diff": "nonempty"
+    },
+    {
+      "step": 529,
+      "commit": "c6c89ae0ce42f7db8f9925e3192744c38d853631",
+      "message": "verify mcp auth rotation pipeline",
+      "diff": "nonempty"
+    },
+    {
+      "step": 530,
+      "commit": "06bee50445cc6c257c13272e41674e45f537e01f",
+      "message": "verify migration policy",
+      "diff": "nonempty"
+    },
+    {
+      "step": 531,
+      "commit": "eae21506d89c47bfb3fba81b98350835ed8a0b12",
+      "message": "verify model onboarding",
+      "diff": "nonempty"
+    },
+    {
+      "step": 532,
+      "commit": "618dd835bd4ef49737c6745a9517a220b89b6616",
+      "message": "verify model store transaction",
+      "diff": "nonempty"
+    },
+    {
+      "step": 533,
+      "commit": "a65a5ec733e7209442ec494d7fc8175d5fba777c",
+      "message": "verify rag retrieval verifier",
+      "diff": "nonempty"
+    },
+    {
+      "step": 534,
+      "commit": "e7e243a62f66b5cfd5ffc45ade3847846ed10515",
+      "message": "verify readiness retry",
+      "diff": "nonempty"
+    },
+    {
+      "step": 535,
+      "commit": "1a232556eb8f0d884976144f1c4ddc366ab6bfd2",
+      "message": "verify recommendation evaluation",
+      "diff": "nonempty"
+    },
+    {
+      "step": 536,
+      "commit": "e691254b5633a49302a1df8d8336e445e666e67c",
+      "message": "verify recommendation prepare",
+      "diff": "nonempty"
+    },
+    {
+      "step": 537,
+      "commit": "7dee1be1bce4d76a8371d7122adece4ad528ff62",
+      "message": "verify recommendation trigger",
+      "diff": "nonempty"
+    },
+    {
+      "step": 538,
+      "commit": "6e737c9daf69559d69d9fd8ee85bb7c091055ebd",
+      "message": "verify small compatibility",
+      "diff": "nonempty"
+    },
+    {
+      "step": 539,
+      "commit": "a6eccff2b21eebf08720c6ace43cd14cfb3dbf3c",
+      "message": "verify terminal cleanup",
+      "diff": "nonempty"
+    },
+    {
+      "step": 540,
+      "commit": "06fe960dd07069cfd012673439a3c2b18b3455be",
+      "message": "enforce agent registry contracts repository contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 541,
+      "commit": "399b2c6cf907ef1f952d3b725923b4b6fdd10f9c",
+      "message": "enforce agentic context contracts repository contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 542,
+      "commit": "28b5a8e67b7f23e7d3a54f3c4a2787d384148235",
+      "message": "enforce analytics contracts repository contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 543,
+      "commit": "d6db7433e911b22e5bb7585afc4e07de33cfba35",
+      "message": "enforce coordinator agentic contracts repository contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 544,
+      "commit": "7ca2823c0d2ab947a33b06e9f4769f17089562b0",
+      "message": "enforce demo web contracts repository contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 545,
+      "commit": "07f1ce2cc2f63d40d1f5e7b091e41636bbb8899a",
+      "message": "enforce docker dataflow contracts repository contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 546,
+      "commit": "85b79898267bccb9a70b0a5f48942b9416001d04",
+      "message": "enforce gateway contracts repository contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 547,
+      "commit": "3b6126f7bd23cc5bb32ce9e11252d7137f121d05",
+      "message": "enforce gcp services power contracts repository contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 548,
+      "commit": "68708bc65cba76f8c5e69af913d5518d98be6e0e",
+      "message": "enforce gcp terraform wrapper contracts repository contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 549,
+      "commit": "0e276780823afab1ad78330b8d2183bb171e0987",
+      "message": "enforce langfuse infrastructure contracts repository contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 550,
+      "commit": "46e8d4a9df6cc97a7f9dabb19e928f5b5948c8bd",
+      "message": "enforce llm inference contracts repository contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 551,
+      "commit": "569f1c3fa1b548f468bb953c349ab8d3fbe7496c",
+      "message": "enforce mcp auth rotation contracts repository contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 552,
+      "commit": "f0e63e1c4d4cdfdf323959547e0d455e50f94831",
+      "message": "enforce observability contracts repository contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 553,
+      "commit": "8a57b52cf48093295ccd6d5ec078ff72af9d1ecd",
+      "message": "enforce recommendation agentic contracts repository contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 554,
+      "commit": "c5e99ed58d58ed5fac62cf43357e69a959c8c81c",
+      "message": "enforce repository layout contracts repository contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 555,
+      "commit": "f6e0223fa3701aea7d00d1f14268ad8eb77caa21",
+      "message": "enforce serving contracts repository contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 556,
+      "commit": "dff484a2100b320b33dd07ecf70d2cb841a70beb",
+      "message": "enforce stream online serving contract repository contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 557,
+      "commit": "aa0c678561ea2bd9d62b3d4be9c0e3d5fec0072e",
+      "message": "exercise cross-service integration contracts",
+      "diff": "nonempty"
+    },
+    {
+      "step": 558,
+      "commit": "bd572506f3f586a5533a7a8c3146fdd62c425da1",
+      "message": "exercise deployed recommendation and agent workflows",
+      "diff": "nonempty"
+    },
+    {
+      "step": 559,
+      "commit": "d1d67b383d038af710f8d3084e47cc703c32a153",
+      "message": "restore bounded serving and RAG load probes",
+      "diff": "nonempty"
+    },
+    {
+      "step": 560,
+      "commit": "6ad31f26dae7628a7a80e3d70f12db118637673b",
+      "message": "restore generated data quality gates",
+      "diff": "nonempty"
+    },
+    {
+      "step": 561,
+      "commit": "81f7160027871ecab67c4bbe71cc674a45b3479f",
+      "message": "verify the demo backend persistence and HTTP contract",
+      "diff": "nonempty"
+    },
+    {
+      "step": 562,
+      "commit": "2f9bc7900a6de1b374f65be1130b16af39a0b486",
+      "message": "verify recommendation MCP mutation oracles",
+      "diff": "nonempty"
+    },
+    {
+      "step": 563,
+      "commit": "8868b45814665f9b2efeb59d4bc05b2bf5529738",
+      "message": "restore research preparation and export utilities",
+      "diff": "nonempty"
+    },
+    {
+      "step": 564,
+      "commit": "95bfa01923f97d7277b219c548499063f2c31830",
+      "message": "restore sanitized executable research notebooks",
+      "diff": "nonempty"
+    },
+    {
+      "step": 565,
+      "commit": "8c8066afd18dc3d312f0686fe844b675eba8c316",
+      "message": "compile and validate the Kubeflow training package",
+      "diff": "nonempty"
+    },
+    {
+      "step": 566,
+      "commit": "16d0ba55a62ac8659c61bd6f328e87a9a5424bb5",
+      "message": "expose supported local and cloud verification commands",
+      "diff": "nonempty"
+    },
+    {
+      "step": 567,
+      "commit": "3e3e4a6d18d978d2b5cd25f8ac2c37a41c0cd836",
+      "message": "verify feature API Helm ownership preservation",
+      "diff": "nonempty"
+    },
+    {
+      "step": 568,
+      "commit": "SELF",
+      "message": "record reconstructed source and verification provenance",
+      "diff": "reconstruction-audit.json",
+      "resolution": "Resolve SELF as HEAD when HEAD has this message and its parent equals the step 567 commit."
+    }
+  ],
+  "owner_remapping": {
+    "gcp_project": {
+      "source": "recsys-mlops-506406",
+      "target_placeholder": "owner-project"
+    },
+    "public_domain": {
+      "source": "recsys-mlops.site",
+      "target_placeholder": "example.invalid"
+    },
+    "public_ipv4": {
+      "source": "136.85.106.59",
+      "target_placeholder": "203.0.113.10"
+    },
+    "image_registry": {
+      "policy": "Use registry.example.invalid/recsys or an owner-provided registry; never relabel private source artifacts."
+    },
+    "credentials": {
+      "policy": "Tracked credentials were removed or replaced by runtime environment/secret injection; local integration credentials are synthetic fixtures only."
+    }
+  },
+  "intentional_exclusions_and_deviations": [
+    "All README files were excluded as required by the reconstruction specification.",
+    "The known redundant standalone router Dockerfile was excluded.",
+    "Framework caches, .DS_Store, coverage files, virtual environments, generated registry.db files, and historical runtime outputs were excluded.",
+    "Notebook outputs, execution counts, and personal kernel metadata were cleared; code and markdown intent were retained.",
+    "pipelines/kubeflow/compiled/bst_training_pipeline.yaml remains generated and ignored; it must be rebuilt from the reconstructed compiler in an installed ML profile.",
+    "Existing unrelated untracked files whose names contain a trailing ` 2` were preserved and never staged."
+  ],
+  "verification": {
+    "status": "static reconstruction checks passed; owner-dependent live checks remain pending",
+    "checks": [
+      {
+        "command": "git rev-list --count 06e1acc..HEAD",
+        "result": "567 before the self-referential final audit commit; expected 568 after commit"
+      },
+      {
+        "command": "git diff-tree --no-commit-id --name-only -r <each reconstruction commit>",
+        "result": "steps 1-567 each have a nonempty diff"
+      },
+      {
+        "command": "python3 -c compile(...) for restored Python files",
+        "result": "passed"
+      },
+      {
+        "command": "bash -n for restored shell files",
+        "result": "passed"
+      },
+      {
+        "command": "jq empty for restored notebooks plus AST parsing for valid Python code cells",
+        "result": "passed"
+      },
+      {
+        "command": "source-copy comparison after documented owner, secret, and notebook transformations",
+        "result": "passed"
+      },
+      {
+        "command": "git diff --check across each reconstructed batch",
+        "result": "passed"
+      },
+      {
+        "command": "make help",
+        "result": "passed"
+      },
+      {
+        "command": "git ls-files | rg `(^|/)README(\\.|$)`",
+        "result": "no tracked README files"
+      },
+      {
+        "command": "pytest / uv test profiles",
+        "result": "not run: pytest and uv executables are unavailable in the reconstruction environment"
+      }
+    ]
+  },
+  "missing_services_and_runtime_dependencies": [
+    "Owner GCP project, authenticated account, Terraform state bucket, and GKE cluster",
+    "Owner DNS, public ingress address, TLS issuer identity, and public endpoints",
+    "Owner image registry and rebuilt immutable images",
+    "Jenkins, Vault, Kubernetes secrets, and production deployment credentials",
+    "Live Kafka, MinIO, Milvus, Feast, Hudi, Airflow, DataHub, MLflow, KServe, observability, and agent services",
+    "Installed project-specific Python test profiles including pytest and uv"
+  ],
+  "remaining_owner_actions": [
+    "Replace disabled placeholders with owner-controlled project, cluster, registry, DNS, TLS, and secret-backed configuration.",
+    "Install the declared per-service dependency profiles and run the complete unit, contract, integration, and end-to-end test matrix.",
+    "Compile and validate the Kubeflow pipeline package from source.",
+    "Run cloud, deployment, load, mutation, recovery, and public-surface checks only in an authorized disposable environment before production.",
+    "Review and either retain or remove the unrelated untracked ` 2` duplicate files outside this reconstruction."
+  ]
+}
