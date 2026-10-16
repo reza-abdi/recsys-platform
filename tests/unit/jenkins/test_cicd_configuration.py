@@ -1,0 +1,1350 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+import re
+import subprocess
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[3]
+CONFIGURATION_PATH = ROOT / "jenkins/python/configuration.py"
+SPEC = importlib.util.spec_from_file_location(
+    "jenkins_configuration", CONFIGURATION_PATH
+)
+assert SPEC and SPEC.loader
+configuration = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(configuration)
+
+EXPECTED_STAGES = [
+    "Checkout",
+    "Detect Changed Components",
+    "Python Env",
+    "Component CI",
+    "Docker Login",
+    "Component Build And Publish",
+    "Component Deploy Or Update",
+]
+EXPECTED_STAGE_VIEW = [
+    "Declarative: Checkout SCM",
+    *EXPECTED_STAGES,
+    "Declarative: Post Actions",
+]
+
+
+def test_coordinator_preserves_explicit_context_tool_handoff():
+    coordinator_values = (
+        ROOT / "infra/helm/recsys-coordinator-agent/values.yaml"
+    ).read_text(encoding="utf-8")
+    coordinator_prompt = " ".join(coordinator_values.split())
+
+    assert "Never send bare JSON to the Context Agent" in coordinator_prompt
+    assert 'must begin with "Call", the exact MCP tool name' in coordinator_prompt
+    assert '"exactly once with arguments"' in coordinator_prompt
+
+
+def test_ci_config_environment_pins_all_runtime_imports():
+    requirements = ROOT / "jenkins/config/ci-config-requirements.txt"
+    pins = {
+        line.split("==", 1)[0]
+        for line in requirements.read_text(encoding="utf-8").splitlines()
+        if line and not line.startswith("#")
+    }
+    assert pins == {
+        "boto3",
+        "botocore",
+        "fastapi",
+        "httpx",
+        "opentelemetry-api",
+        "opentelemetry-exporter-otlp-proto-http",
+        "opentelemetry-sdk",
+        "psycopg[binary]",
+        "pytest",
+        "pyyaml",
+        "requests",
+    }
+
+    script = (ROOT / "jenkins/scripts/entrypoints/ci_config.sh").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        'ci_config_requirements="jenkins/config/ci-config-requirements.txt"' in script
+    )
+    assert '--requirement "${ci_config_requirements}"' in script
+
+
+def test_jenkins_runtime_installs_and_verifies_jq():
+    template = (ROOT / "infra/helm/recsys-ci/templates/jenkins.yaml").read_text(
+        encoding="utf-8"
+    )
+    package_block = template.split("apt-get install", 1)[1].split(
+        "rm -rf /var/lib/apt/lists", 1
+    )[0]
+    assert "                jq \\\n" in package_block
+    assert "              jq --version\n" in template
+
+
+def test_static_helm_validation_supplies_a_non_production_digest():
+    script = (ROOT / "jenkins/scripts/entrypoints/ci_config.sh").read_text(
+        encoding="utf-8"
+    )
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    for source in (script, makefile):
+        assert "registry.example.invalid/recsys/static-validation@sha256:" in source
+        assert "recsys-llm-ab" in source
+        assert "recsys-workflow-ab" in source
+        assert "--set-string" in source
+        assert "static_validation_image" in source
+
+
+EXPECTED_LABELS = [
+    "Materialize Pipeline",
+    "Training Pipeline",
+    "DP1 Raw To Bronze",
+    "DP2 Bronze To Silver Gold",
+    "DP3 Offline Feature Table",
+    "DataHub Static Catalog",
+    "RAG Item Index",
+    "RAG Retrieval API",
+    "Online Feature API",
+    "Feature RAG MCP",
+    "RecSys Context Agent",
+    "Recommendation MCP",
+    "Recommendation Sandbox Agent",
+    "RecSys Coordinator Sandbox Agent",
+    "Inference API",
+    "KServe Inference Engine",
+    "Progressive Model Rollout",
+    "Realtime Drift Detection",
+    "Stream Features To Offline Store",
+    "Stream Features To Online Store",
+    "Analytics And BI",
+    "Recommendation Demo Web",
+]
+
+
+def _deploy_bundle(name: str) -> str:
+    loader = (ROOT / "jenkins/scripts/deploy" / f"{name}.sh").read_text(
+        encoding="utf-8"
+    )
+    modules = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((ROOT / "jenkins/scripts/deploy" / name).glob("*.sh"))
+    )
+    runtime = (ROOT / "jenkins/scripts/lib/runtime.sh").read_text(encoding="utf-8")
+    return f"{loader}\n{runtime}\n{modules}"
+
+
+def test_deploy_helpers_are_modular_and_preserve_caller_shell_options():
+    expected_modules = {
+        "agentic": {
+            "kubernetes.sh",
+            "mcp.sh",
+            "a2a.sh",
+            "registry.sh",
+            "registry_publish.sh",
+            "registry_transport.sh",
+            "registry_verify.sh",
+            "rotation.sh",
+        },
+        "rag": {
+            "bootstrap.sh",
+            "kubernetes.sh",
+            "api.sh",
+            "index_lifecycle.sh",
+            "rollback.sh",
+        },
+    }
+    for name, expected in expected_modules.items():
+        loader = (ROOT / "jenkins/scripts/deploy" / f"{name}.sh").read_text(
+            encoding="utf-8"
+        )
+        module_paths = sorted((ROOT / "jenkins/scripts/deploy" / name).glob("*.sh"))
+        assert {path.name for path in module_paths} == expected
+        assert "source jenkins/scripts/lib/runtime.sh" in loader
+        for path in module_paths:
+            source = path.read_text(encoding="utf-8")
+            assert not re.search(r"^set [+-]", source, flags=re.MULTILINE)
+            if path.name.startswith("registry_"):
+                registry_loader = (
+                    ROOT / "jenkins/scripts/deploy/agentic/registry.sh"
+                ).read_text(encoding="utf-8")
+                assert f'/{path.name}"' in registry_loader
+            else:
+                assert f'/{path.name}"' in loader
+    runtime = (ROOT / "jenkins/scripts/lib/runtime.sh").read_text(encoding="utf-8")
+    assert not re.search(r"^set [+-]", runtime, flags=re.MULTILINE)
+    assert "recsys_cleanup_process()" in runtime
+    assert "recsys_wait_http()" in runtime
+    assert "recsys_wait_kubernetes_job()" in runtime
+    assert "recsys_write_registry_evidence()" in runtime
+
+
+def test_stage_view_contract_keeps_all_nine_stages_in_order():
+    assert EXPECTED_STAGE_VIEW == [
+        "Declarative: Checkout SCM",
+        "Checkout",
+        "Detect Changed Components",
+        "Python Env",
+        "Component CI",
+        "Docker Login",
+        "Component Build And Publish",
+        "Component Deploy Or Update",
+        "Declarative: Post Actions",
+    ]
+
+
+def test_component_catalog_is_valid_and_preserves_stage_view_labels():
+    components = configuration.load_components()
+    assert [component["label"] for component in components] == EXPECTED_LABELS
+    assert components[-1]["name"] == "demo_web"
+    assert all(component["changeDetection"] for component in components)
+    assert all("buildImages" in component for component in components)
+    assert all("verifyDependsOn" in component for component in components)
+
+
+def test_configuration_json_rejects_duplicate_keys(tmp_path):
+    duplicate = tmp_path / "duplicate.json"
+    duplicate.write_text('{"version": 2, "version": 3}\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="duplicate JSON key: version"):
+        configuration.read_json(duplicate)
+
+
+def test_datahub_catalog_has_a_dedicated_component_and_deploy_action():
+    components = {
+        component["name"]: component for component in configuration.load_components()
+    }
+    component = components["datahub_catalog"]
+    assert component["buildImages"] == ["recsys-datahub-ops"]
+    assert component["migrationPolicy"] == "none"
+
+    units = json.loads((ROOT / "jenkins/config/deploy-units.json").read_text())["units"]
+    unit = next(item for item in units if item["name"] == "datahub-catalog")
+    assert unit["kind"] == "kubernetes-action"
+    assert unit["components"] == ["datahub_catalog"]
+    assert unit["dependsOn"] == ["data-config"]
+
+
+def test_agentic_components_have_separate_image_and_chart_ownership():
+    components = {
+        component["name"]: component for component in configuration.load_components()
+    }
+    assert components["feature_rag_mcp"]["buildImages"] == ["recsys-feature-rag-mcp"]
+    assert components["feature_rag_mcp"]["buildArtifacts"] == ["feature-rag-mcp-chart"]
+    assert components["feature_rag_mcp"]["verifyDependsOn"] == [
+        "online_feature_api",
+        "rag_api",
+    ]
+    assert components["context_agent"]["buildImages"] == []
+    assert components["context_agent"]["verifyDependsOn"] == ["feature_rag_mcp"]
+
+    units = {
+        item["name"]: item
+        for item in json.loads((ROOT / "jenkins/config/deploy-units.json").read_text())[
+            "units"
+        ]
+    }
+    assert units["feature-rag-mcp"]["consumesImages"] == ["recsys-feature-rag-mcp"]
+    assert units["context-agent"]["consumesImages"] == []
+    assert units["milvus"]["components"] == ["rag_index"]
+    assert units["milvus-credentials"]["components"] == ["rag_index"]
+    assert units["milvus-credentials"]["requiresExplicitComponent"] is True
+    assert units["rag-feature-registry"]["components"] == ["rag_index"]
+    assert units["rag-feature-registry"]["requiresExplicitComponent"] is True
+    assert units["feature-rag-mcp"]["dependsOn"] == [
+        "rag-api",
+        "feature-rag-mcp-registry",
+    ]
+    assert units["context-agent"]["dependsOn"] == [
+        "global-model-config",
+        "feature-rag-mcp",
+        "context-agent-registry",
+    ]
+    assert units["context-agent-registry"]["dependsOn"] == ["feature-rag-mcp-registry"]
+    assert units["feature-rag-mcp-registry"]["kind"] == "jenkins-action"
+    assert units["context-agent-registry"]["kind"] == "jenkins-action"
+    assert units["feature-rag-mcp-registry"]["phase"] == "publish"
+    assert units["context-agent"]["phase"] == "deploy"
+
+    assert components["recommendation_mcp"]["buildImages"] == [
+        "recsys-recommendation-mcp"
+    ]
+    assert components["recommendation_mcp"]["verifyDependsOn"] == ["inference_api"]
+    assert components["recommendation_agent"]["buildImages"] == []
+    assert components["recommendation_agent"]["verifyDependsOn"] == [
+        "recommendation_mcp"
+    ]
+    assert "context_agent" not in components["recommendation_agent"]["verifyDependsOn"]
+    assert units["recommendation-mcp"]["dependsOn"] == [
+        "inference-api",
+        "recommendation-mcp-registry",
+    ]
+    assert units["recommendation-agent"]["dependsOn"] == [
+        "global-model-config",
+        "recommendation-mcp",
+        "recommendation-agent-registry",
+    ]
+    assert units["recommendation-mcp-registry"]["dependsOn"] == []
+    assert units["recommendation-agent-registry"]["dependsOn"] == [
+        "recommendation-mcp-registry",
+    ]
+
+    assert components["coordinator_agent"]["buildImages"] == []
+    assert components["coordinator_agent"]["verifyDependsOn"] == [
+        "context_agent",
+        "recommendation_agent",
+    ]
+    assert units["coordinator-agent"]["dependsOn"] == [
+        "global-model-config",
+        "context-agent",
+        "recommendation-agent",
+        "coordinator-agent-registry",
+    ]
+    assert units["coordinator-agent-registry"]["dependsOn"] == [
+        "feature-rag-mcp-registry",
+        "recommendation-mcp-registry",
+        "context-agent-registry",
+        "recommendation-agent-registry",
+    ]
+
+    deploy = _deploy_bundle("agentic")
+    assert "main|origin/main|refs/heads/main|refs/remotes/origin/main" in deploy
+    assert "jenkins.python.agent_registry_release" in deploy
+    assert "publish_agent_registry_artifact" in deploy
+    assert 'arctl apply -f "${manifest}"' in deploy
+    assert "RECOMMENDATION_A2A_MAX_ATTEMPTS:-1" in deploy
+    assert "AGENTIC_A2A_MAX_ATTEMPTS:-1" in deploy
+    assert "COORDINATOR_A2A_MAX_ATTEMPTS:-1" in deploy
+    assert "/api/a2a-sandboxes/kagent/${agent_name}" in deploy
+    assert "arctl delete" not in deploy
+    assert '"apiVersion": "apps/v1"' in deploy
+    assert '"kind": "Deployment"' in deploy
+    assert 'active.get("status") == "True"' in deploy
+    assert 'a2a_path="api/a2a-sandboxes"' in deploy
+    assert "local_port=$((local_port + 1))" not in deploy
+
+    autoscale = (ROOT / "ops/validation/agentic_context_autoscale.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "AGENTIC_AGENT_LOAD_REQUESTS:-20" in autoscale
+    assert "do not call tools" in autoscale
+    assert 'wait "${load_pid}"' in autoscale
+
+    jenkins_chart = (ROOT / "infra/helm/recsys-ci/templates/jenkins.yaml").read_text(
+        encoding="utf-8"
+    )
+    assert "kubeconformSha256" in jenkins_chart
+    assert "arctlSha256" in jenkins_chart
+    assert "buildxSha256" in jenkins_chart
+    assert "docker buildx version" in jenkins_chart
+    assert "DOCKER_CLI_PLUGIN_EXTRA_DIRS" in jenkins_chart
+    assert "/var/jenkins_home/caches/uv" in jenkins_chart
+    assert "/var/jenkins_home/ci-tmp" in jenkins_chart
+
+
+def test_agentic_shell_entrypoints_are_syntactically_valid() -> None:
+    for relative_path in (
+        "jenkins/scripts/ci/agentic.sh",
+        "jenkins/scripts/deploy/agentic.sh",
+        "jenkins/scripts/test/agentic.sh",
+    ):
+        subprocess.run(
+            ["bash", "-n", str(ROOT / relative_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+
+def test_datahub_cutover_is_opt_in_and_archives_the_reviewed_manifest():
+    pipeline = (ROOT / "Jenkinsfile").read_text(encoding="utf-8")
+    helper = (ROOT / "jenkins/pipeline/component_pipeline.groovy").read_text(
+        encoding="utf-8"
+    )
+    assert "choices: ['skip', 'plan', 'apply']" in pipeline
+    assert "datahub-dataset-lineage-cutover.json.counts" in helper
+    assert "Apply the archived DataHub soft-delete manifest? Targets:" in helper
+    assert ".ci-deploy/**/*" in helper
+    trigger = (ROOT / "ops/gcp/trigger_full_jenkins.sh").read_text(encoding="utf-8")
+    assert "datahub_catalog" in trigger
+    assert "DATAHUB_CUTOVER_MODE=${datahub_cutover_mode}" in trigger
+    cutover_entrypoint = ROOT / "jenkins/scripts/entrypoints/datahub_cutover.sh"
+    assert cutover_entrypoint.stat().st_mode & 0o111
+    deploy_script = (ROOT / "jenkins/scripts/deploy/datahub.sh").read_text(
+        encoding="utf-8"
+    )
+    assert 'name: PYTHONWARNINGS, value: "ignore"' in deploy_script
+    assert 'data.get("dry_run") is True' in deploy_script
+    assert 'volume_yaml="          volumeMounts:' in deploy_script
+
+
+def test_agent_registry_publication_is_append_only_and_data_driven():
+    source = _deploy_bundle("agentic")
+    catalog = json.loads(
+        (ROOT / "jenkins/config/agent-registry-artifacts.json").read_text()
+    )
+    assert set(catalog["artifacts"]) == {
+        "feature-rag-mcp",
+        "context-agent",
+        "recommendation-mcp",
+        "recommendation-agent",
+        "coordinator-agent",
+    }
+    assert "publish_agent_registry_artifact" in source
+    assert "arctl delete" not in source
+
+
+def test_full_release_verification_orders_data_before_training(tmp_path):
+    plan_path = tmp_path / "release-plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "version": 3,
+                "commit": "a" * 40,
+                "releaseVersion": "0.2.0-gaaaaaaaaaaaa",
+                "components": [
+                    "materialize",
+                    "training",
+                    "dp1",
+                    "dp2",
+                    "dp3",
+                    "analytics",
+                ],
+                "buildImages": [],
+                "buildArtifacts": [],
+                "publishUnits": [],
+                "deployUnits": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    completed = subprocess.run(
+        [
+            "python3",
+            "jenkins/python/release_plan.py",
+            "plan-verifications",
+            "--plan",
+            str(plan_path),
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    ordered = completed.stdout.splitlines()
+    assert ordered.index("dp1") < ordered.index("dp2") < ordered.index("dp3")
+    assert ordered.index("dp3") < ordered.index("materialize")
+    assert ordered.index("materialize") < ordered.index("training")
+    assert ordered.index("dp2") < ordered.index("analytics")
+
+
+def test_stream_components_share_one_production_verification():
+    completed = subprocess.run(
+        [
+            "bash",
+            "-c",
+            "source jenkins/scripts/test/dispatch.sh; "
+            "component_verification_key stream_offline; "
+            "component_verification_key stream_online",
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.stdout.splitlines() == ["stream_features", "stream_features"]
+
+
+def test_stream_online_runs_only_the_cross_boundary_contract():
+    data_ci = (ROOT / "jenkins/scripts/ci/data.sh").read_text(encoding="utf-8")
+    stream_online = data_ci.split("ci_stream_online()", 1)[1].split("\n}", 1)[0]
+
+    assert "test_stream_online_serving_contract.py" in stream_online
+    assert "tests/unit/api_serving/test_serving.py" not in stream_online
+
+
+def test_feature_and_inference_ci_do_not_collect_rag_api_tests():
+    serving_ci = (ROOT / "jenkins/scripts/ci/serving.sh").read_text(encoding="utf-8")
+
+    online = serving_ci.split("ci_online_feature_api()", 1)[1].split("\n}", 1)[0]
+    inference = serving_ci.split("ci_inference_api()", 1)[1].split("\n}", 1)[0]
+    for component in (online, inference):
+        assert "tests/unit/api_serving/test_serving.py" in component
+        assert "tests/unit/api_serving/test_split_services.py" in component
+        assert "tests/unit/api_serving tests/" not in component
+    assert "tests/unit/api_serving/online_feature_api" in online
+    assert "tests/unit/api_serving/inference_api" in inference
+    assert "test_validation_verification.py" not in serving_ci
+    assert "test_rubric_completion.py" not in serving_ci
+
+
+def test_serving_mutation_pipeline_is_nightly_manual_and_standalone():
+    pipeline = (ROOT / "jenkins/ServingMutation.Jenkinsfile").read_text(
+        encoding="utf-8"
+    )
+
+    assert "cron('H H * * *')" in pipeline
+    assert "choice(name: 'SERVICE'" in pipeline
+    assert "tests/unit/api_serving/run_mutation.py" in pipeline
+    assert "tests/unit/api_serving/reports/*.json" in pipeline
+    assert "tests/unit/api_serving/reports/*.txt" in pipeline
+    assert "ServingMutation.Jenkinsfile" not in (ROOT / "Jenkinsfile").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_rollout_deploy_uses_release_plan_namespace():
+    entrypoint = (ROOT / "jenkins/scripts/deploy/release_unit_runtime.sh").read_text(
+        encoding="utf-8"
+    )
+    rollout = (ROOT / "jenkins/scripts/deploy/rollout.sh").read_text(encoding="utf-8")
+
+    assert 'deploy_rollout_watcher "${unit_namespace}"' in entrypoint
+    assert 'local namespace="$1"' in rollout
+    assert "namespace_ci" not in rollout
+
+
+def test_online_feature_deploy_takes_ownership_from_legacy_release():
+    entrypoint = (ROOT / "jenkins/scripts/deploy/release_unit_runtime.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert '[[ "${unit_name}" == "online-feature-api" ]]' in entrypoint
+    assert "helm_args+=(--take-ownership)" in entrypoint
+    assert 'helm history "${unit_release}"' in entrypoint
+    assert 'item.get("status") == "deployed"' in entrypoint
+    assert '[[ "${deployed_revision_count}" == "0" ]]' in entrypoint
+    assert "helm_failure_args=()" in entrypoint
+    assert "using non-destructive initial ownership transfer" in entrypoint
+
+
+def test_split_api_gcp_values_preserve_the_legacy_ml_node_placement():
+    for chart in ("recsys-online-feature-api", "recsys-inference-api"):
+        values = (ROOT / "infra/helm" / chart / "values-gcp.yaml").read_text(
+            encoding="utf-8"
+        )
+        assert "recsys.ai/workload: ml-system" in values
+        assert "effect: NoSchedule" in values
+
+
+def test_online_feature_deploy_uses_canonical_registry_secret_without_cli_leakage():
+    entrypoint = (ROOT / "jenkins/scripts/deploy/release_unit_runtime.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert '"recsys-data-platform-secret", "-o", "json"' in entrypoint
+    assert 'chmod 600 "${sensitive_values_file}"' in entrypoint
+    assert 'helm_args+=(-f "${sensitive_values_file}")' in entrypoint
+    assert '--set-string "config.feastPostgresPassword=' not in entrypoint
+
+
+def test_rag_promotion_contract_gate_uses_the_required_python_runtime():
+    deployment = (ROOT / "jenkins/scripts/deploy/rag/api.sh").read_text(
+        encoding="utf-8"
+    )
+    contract_gate = deployment.split("rag_verify_api_contract()", 1)[1].split("\n}", 1)[
+        0
+    ]
+
+    assert 'python3 - "${report}"' in contract_gate
+    assert "jq -e" not in contract_gate
+    assert "supported_embedding_contracts" in contract_gate
+
+
+def test_rag_job_wait_retries_visibility_and_fails_fast_on_failed_condition():
+    wrapper = (ROOT / "jenkins/scripts/deploy/rag/kubernetes.sh").read_text(
+        encoding="utf-8"
+    )
+    deployment = (ROOT / "jenkins/scripts/lib/runtime.sh").read_text(encoding="utf-8")
+    wait_job = deployment.split("recsys_wait_kubernetes_job()", 1)[1].split("\n}", 1)[0]
+
+    assert 'recsys_wait_kubernetes_job "$@"' in wrapper
+    assert "for _ in $(seq 1 30)" in wait_job
+    assert 'get "job/${job}"' in wait_job
+    assert "sleep 1" in wait_job
+    assert "Complete=True" in wait_job
+    assert "Failed=True" in wait_job
+    assert "Timed out after ${timeout}" in wait_job
+    assert "wait --for=condition=complete" not in wait_job
+    assert "was not visible after creation" in wait_job
+
+
+def test_analytics_reuses_deployed_digests_for_images_not_built_in_release():
+    deployment = (ROOT / "jenkins/scripts/deploy/analytics.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "analytics_release_image()" in deployment
+    assert 'item.get("status") == "deployed"' in deployment
+    assert '--revision "${deployed_revision}"' in deployment
+    assert "registry_resolve_digest_reference" in deployment
+    assert (
+        "analytics_release_image recsys-spark-analytics images.sparkAnalytics"
+        in deployment
+    )
+    assert "analytics_release_image recsys-analytics-dbt images.dbt" in deployment
+    assert (
+        "analytics_release_image recsys-analytics-superset images.superset"
+        in deployment
+    )
+    assert "resolve_release_image recsys-analytics-superset" not in deployment
+
+
+def test_rag_promotion_tunnels_to_a_running_pod_and_retries_readiness():
+    deployment = (ROOT / "jenkins/scripts/deploy/rag/api.sh").read_text(
+        encoding="utf-8"
+    )
+    tunnel = deployment.split("rag_start_api_port_forward()", 1)[1].split("\n}", 1)[0]
+    gcp_values = (ROOT / "infra/helm/recsys-rag-api/values-gcp.yaml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "--field-selector=status.phase=Running" in tunnel
+    assert 'port-forward "pod/${ready_pod}"' in tunnel
+    assert "rollout status deployment/recsys-rag-api" in tunnel
+    assert 'recsys_wait_http "http://127.0.0.1:${port}/ready" 30 1' in tunnel
+    runtime = (ROOT / "jenkins/scripts/lib/runtime.sh").read_text(encoding="utf-8")
+    assert 'for _ in $(seq 1 "${attempts}")' in runtime
+    assert "nodeSelector: {}" in gcp_values
+    assert "recsys.ai/pool: cpu-services" not in gcp_values
+    assert "key: recsys.ai/workload" in gcp_values
+    assert "value: ml-system" in gcp_values
+    assert "maxSurge: 0" in gcp_values
+    assert "maxUnavailable: 1" in gcp_values
+    assert "cpu: 150m" in gcp_values
+    assert "memory: 768Mi" in gcp_values
+
+
+def test_rag_transient_milvus_jobs_use_released_ml_capacity():
+    deployment = (ROOT / "jenkins/scripts/deploy/rag/bootstrap.sh").read_text(
+        encoding="utf-8"
+    )
+    bootstrap = deployment.split("rag_milvus_credentials_bootstrap()", 1)[1]
+
+    assert "nodeSelector: {recsys.ai/workload: ml-system}" in bootstrap
+    assert "value: ml-system, effect: NoSchedule" in bootstrap
+
+
+def test_rag_promotion_uses_pinned_embedding_batch_and_schedulable_request():
+    deployment = (ROOT / "jenkins/scripts/deploy/rag/index_lifecycle.sh").read_text(
+        encoding="utf-8"
+    )
+    promotion = deployment.split("rag_index_promote()", 1)[1]
+
+    assert promotion.count("embed-chunks") == 2
+    assert promotion.count("--checkpoint-every 32") == 2
+    assert 'local cpu_request="${RAG_PROMOTION_CPU_REQUEST:-100m}"' in promotion
+    assert 'requests: {cpu: "${cpu_request}", memory: 2Gi}' in promotion
+    assert "nodeSelector: {recsys.ai/workload: ml-system}" in promotion
+    assert "value: ml-system, effect: NoSchedule" in promotion
+
+
+def test_registry_push_refreshes_login_and_retries_once(tmp_path):
+    attempt_path = tmp_path / "push-attempts"
+    login_path = tmp_path / "registry-logins"
+    push_log = tmp_path / "push.log"
+    completed = subprocess.run(
+        [
+            "bash",
+            "-c",
+            r"""
+set -euo pipefail
+source jenkins/scripts/lib/common.sh
+source jenkins/scripts/build/engine.sh
+attempt_path="$1"
+login_path="$2"
+push_log="$3"
+printf '0\n' >"${attempt_path}"
+docker() {
+  local count
+  count="$(<"${attempt_path}")"
+  count=$((count + 1))
+  printf '%s\n' "${count}" >"${attempt_path}"
+  if [[ "${count}" == "1" ]]; then
+    printf 'unauthorized: authentication failed\n' >&2
+    return 1
+  fi
+  printf 'digest: sha256:%064d\n' 0
+}
+registry_login_gcp() {
+  printf 'login\n' >>"${login_path}"
+}
+BUILD_REGISTRY_HOST=asia-southeast1-docker.pkg.dev
+BUILD_IMAGE_REGISTRY=asia-southeast1-docker.pkg.dev/example/recsys
+BUILD_REGISTRY_LOGIN_EPOCH=0
+push_built_image example/image:tag "${push_log}"
+printf 'attempts=%s logins=%s\n' \
+  "$(<"${attempt_path}")" \
+  "$(wc -l <"${login_path}" | tr -d ' ')"
+""",
+            "registry-push-test",
+            str(attempt_path),
+            str(login_path),
+            str(push_log),
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "attempts=2 logins=1" in completed.stdout
+    assert "digest: sha256:" in push_log.read_text(encoding="utf-8")
+
+
+def test_deploy_preflight_refreshes_registry_login_before_digest_checks(tmp_path):
+    login_path = tmp_path / "registry-login"
+    plan_path = tmp_path / "release-plan.json"
+    plan_path.write_text("{}\n", encoding="utf-8")
+    completed = subprocess.run(
+        [
+            "bash",
+            "-c",
+            r"""
+set -euo pipefail
+source jenkins/scripts/lib/common.sh
+source jenkins/scripts/deploy/preflight/gcp.sh
+login_path="$1"
+plan_path="$2"
+gcp_production_field() {
+  [[ "$1" == "imageRegistry" ]] || return 1
+  printf '%s\n' 'asia-southeast1-docker.pkg.dev/example/recsys'
+}
+registry_login_gcp() {
+  printf '%s\n' "$1" >"${login_path}"
+}
+image_manifest_lookup() {
+  printf 'asia-southeast1-docker.pkg.dev/example/recsys/%s@sha256:%064d\n' "$1" 0
+}
+python3() {
+  printf '%s\n' 'recsys-base-python'
+}
+docker() {
+  [[ "$1 $2" == "manifest inspect" ]]
+  [[ -s "${login_path}" ]]
+}
+gcp_verify_candidate_digests "${plan_path}"
+""",
+            "deploy-preflight-login-test",
+            str(login_path),
+            str(plan_path),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert (
+        login_path.read_text(encoding="utf-8")
+        .strip()
+        .endswith("asia-southeast1-docker.pkg.dev/example/recsys")
+    )
+
+
+def test_full_jenkins_trigger_reuses_crumb_session_cookie():
+    trigger = (ROOT / "ops/gcp/trigger_full_jenkins.sh").read_text(encoding="utf-8")
+
+    assert '--cookie-jar "${cookie_file}"' in trigger
+    assert '--cookie "${cookie_file}"' in trigger
+    assert 'rm -f "${headers_file}" "${cookie_file}"' in trigger
+    assert "online_feature_api,inference_api" in trigger
+    assert ",api," not in trigger
+    assert "AGENTIC_SMOKE_CHUNK_ID=${agentic_smoke_chunk_id}" in trigger
+    assert "800080:review:rev_800080_02:0" in trigger
+    pipeline = (ROOT / "Jenkinsfile").read_text(encoding="utf-8")
+    assert (
+        "name: 'AGENTIC_SMOKE_CHUNK_ID', defaultValue: '800080:review:rev_800080_02:0'"
+    ) in pipeline
+
+
+def test_api_verification_uses_metric_available_before_live_traffic():
+    serving = (ROOT / "jenkins/scripts/test/serving.sh").read_text(encoding="utf-8")
+
+    assert "recsys_api_rollout_config_info" in serving
+    assert '"model_predictions_total" in response.read()' not in serving
+    assert "API image mismatch" in serving
+
+
+def test_production_verification_is_fail_fast_and_kfp_check_is_read_only():
+    runtime = (ROOT / "jenkins/scripts/test/runtime.sh").read_text(encoding="utf-8")
+    ml_platform = (ROOT / "jenkins/scripts/test/ml_platform.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "set -euo pipefail\n    run_component_verification" in runtime
+    assert "component_ci_python training" in ml_platform
+    assert (
+        '"${training_python}" apps/ml-system/src/kubeflow/verify_pipeline_upload.py'
+        in (ml_platform)
+    )
+    assert "submit_pipeline_run.py" not in ml_platform
+    assert "create_run_from_pipeline_package" not in ml_platform
+
+
+def test_production_verification_does_not_launch_component_workloads():
+    test_sources = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "jenkins/scripts/test").glob("*.sh")
+    )
+    for forbidden in (
+        "airflow dags trigger",
+        "airflow dags unpause",
+        "kubectl apply",
+        "kubectl create",
+        "kubectl run",
+        "--verification-event-id",
+        "submit_pipeline_run.py",
+        "create_run_from_pipeline_package",
+        "mesh_request POST",
+        "dbt test",
+    ):
+        assert forbidden not in test_sources
+    assert "component_test_airflow_dag_registered" in test_sources
+
+
+def test_kfp_runtime_secret_contract_is_checked_without_reading_values():
+    preflight = (ROOT / "jenkins/scripts/deploy/preflight/gcp.sh").read_text(
+        encoding="utf-8"
+    )
+    terraform = (
+        ROOT / "infra/terraform/gcp/modules/kubernetes-platform/secret_management.tf"
+    ).read_text(encoding="utf-8")
+    for key in (
+        "HUDI_DATASET_TABLE",
+        "HUDI_CLEAN_HOURS_RETAINED",
+        "HUDI_ZK_URL",
+        "HUDI_ZK_PORT",
+        "HUDI_ZK_BASE_PATH",
+        "HUDI_ZK_LOCK_KEY",
+    ):
+        assert key in preflight
+        assert key in terraform
+    assert 'json.load(sys.stdin).get("data", {})' in preflight
+
+
+def test_component_catalog_rejects_misspelled_declared_path(tmp_path):
+    payload = json.loads(
+        (ROOT / "jenkins/config/components.json").read_text(encoding="utf-8")
+    )
+    payload["components"][0]["changeDetection"]["files"].append(
+        "apps/data-platform/does-not-exist.py"
+    )
+    config_path = tmp_path / "components.json"
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="path does not exist"):
+        configuration.load_component_config(config_path)
+
+
+def test_component_catalog_rejects_local_only_declared_file(monkeypatch):
+    relative_path = "tests/unit/jenkins/test_cicd_configuration.py"
+    assert (ROOT / relative_path).is_file()
+    monkeypatch.setattr(configuration, "_tracked_paths", lambda: frozenset())
+
+    with pytest.raises(ValueError, match="path is not tracked by Git"):
+        configuration._validate_rule_paths(
+            {"files": [relative_path]}, "local-only rule"
+        )
+
+
+def test_root_jenkins_stage_view_is_compact_and_keeps_internal_checkpoints():
+    source = (ROOT / "Jenkinsfile").read_text(encoding="utf-8")
+    assert (
+        re.findall(r"^\s*stage\('([^']+)'\)", source, flags=re.MULTILINE)
+        == EXPECTED_STAGES
+    )
+    assert "skipDefaultCheckout" not in source
+    assert "checkout scm" not in source
+    assert "disableConcurrentBuilds()" in source
+    assert "githubPush()" not in source
+    assert "componentPipeline.detectReleasePlan()" in source
+    assert "componentPipeline.preparePythonEnvironments()" in source
+    assert "componentPipeline.runComponentCi()" in source
+    assert "componentPipeline.loginToRegistry()" in source
+    assert "componentPipeline.buildAndPublish()" in source
+    assert "componentPipeline.deployProductionRelease()" in source
+    assert "componentPipeline.safePostActions()" in source
+    assert "values_args=(" not in source
+    assert "source jenkins/scripts/" not in source
+    assert "jenkins/scripts/lib/gcp.sh" not in source
+    assert "recovery_status" not in source
+    pipeline_helper = (ROOT / "jenkins/pipeline/component_pipeline.groovy").read_text(
+        encoding="utf-8"
+    )
+    assert "release_plan.py create" not in pipeline_helper
+    assert "applyForcedComponents" not in pipeline_helper
+    assert "selected.collate(maxParallel)" in pipeline_helper
+    assert "def isMainRevision()" in pipeline_helper
+    assert "def isMainBranchEnvironment()" in pipeline_helper
+    assert "def assertDeploySourceIsCurrent()" in pipeline_helper
+    assert "def shouldPublishImages()" in pipeline_helper
+    assert "params.PUBLISH_IMAGES && (" in pipeline_helper
+    assert pipeline_helper.count("params.DEPLOY_PULL_REQUESTS") >= 2
+    assert "params.PUBLISH_IMAGES && env.RUN_COMPONENT_DEPLOY" in pipeline_helper
+    assert "python3 jenkins/python/configuration.py validate" in pipeline_helper
+    assert pipeline_helper.count("release_deploy_preflight.sh") == 1
+    assert "env.SHOULD_PUBLISH_IMAGES = shouldPublishImages()" in pipeline_helper
+    assert (
+        "REQUIRE_GCP_ARTIFACT_REGISTRY=${env.SHOULD_PUBLISH_IMAGES" in pipeline_helper
+    )
+    assert (
+        "REQUIRE_GCP_ARTIFACT_REGISTRY='${params.PUBLISH_IMAGES" not in pipeline_helper
+    )
+    agentic_deploy = _deploy_bundle("agentic")
+    assert "main|origin/main|refs/heads/main|refs/remotes/origin/main" in agentic_deploy
+    assert "git rev-parse --verify 'origin/main^{commit}'" in agentic_deploy
+    assert 'recsys_is_true "${DEPLOY_PULL_REQUESTS:-0}"' in agentic_deploy
+    publish_preflight = (
+        ROOT / "jenkins/scripts/entrypoints/release_publish_preflight.sh"
+    ).read_text(encoding="utf-8")
+    deploy_preflight = (
+        ROOT / "jenkins/scripts/entrypoints/release_deploy_preflight.sh"
+    ).read_text(encoding="utf-8")
+    release_gate = (ROOT / "jenkins/scripts/lib/release_gate.sh").read_text(
+        encoding="utf-8"
+    )
+    assert 'recsys_is_true "${DEPLOY_PULL_REQUESTS:-0}"' in release_gate
+    assert "substrate_status_gate.sh" in publish_preflight
+    assert "release_validate_agent_registry_lock" in deploy_preflight
+    assert "substrate_status_gate.sh" not in deploy_preflight
+    assert "release_snapshot.sh" in pipeline_helper
+    assert "release_rollback.sh" in pipeline_helper
+    publish_transaction = pipeline_helper.split(
+        "def publishRegistryArtifacts()", 1
+    )[1].split("def releaseCommandEnvironment", 1)[0]
+    deploy_transaction = pipeline_helper.split("def deployProductionRelease()", 1)[
+        1
+    ].split("def isMissingWorkspaceContext", 1)[0]
+    assert (
+        deploy_transaction.index("lock(resource: 'recsys-production-release')")
+        < deploy_transaction.index("assertDeploySourceIsCurrent()")
+        < deploy_transaction.index("release_snapshot.sh")
+    )
+    assert "release_publish_preflight.sh" in publish_transaction
+    assert "release_publish_unit.sh" in publish_transaction
+    assert "release_seal_agent_registry_lock.sh" in publish_transaction
+    assert "'publish'" in publish_transaction
+    assert "'deploy'" not in publish_transaction
+    assert "release_publish_unit.sh" not in deploy_transaction
+    assert "release_seal_agent_registry_lock.sh" not in deploy_transaction
+    assert "'deploy'" in deploy_transaction
+    assert (
+        "git fetch --no-tags origin "
+        "+refs/heads/main:refs/remotes/origin/main" in pipeline_helper
+    )
+    assert (
+        'if [ "${checked_out_commit}" != "${current_main_commit}" ]' in pipeline_helper
+    )
+    assert "'finalize'" not in pipeline_helper
+    build_entrypoint = (
+        ROOT / "jenkins/scripts/entrypoints/release_build_publish.sh"
+    ).read_text(encoding="utf-8")
+    assert "[BUILD] Build image ${image_index}/${image_total}" in build_entrypoint
+
+
+def test_github_webhook_trigger_is_owned_by_seeded_root_job() -> None:
+    seed = (
+        ROOT / "infra/helm/recsys-ci/templates/jenkins-init-configmap.yaml"
+    ).read_text(encoding="utf-8")
+
+    trigger_property = (
+        "org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty"
+    )
+    assert seed.count(f"<{trigger_property}>") >= 2
+    assert seed.count(f"</{trigger_property}>") >= 2
+    assert "githubPush()" not in (ROOT / "Jenkinsfile").read_text(encoding="utf-8")
+
+
+def test_jenkins_seeds_four_dedicated_rag_and_agent_cicd_views() -> None:
+    seed = (
+        ROOT / "infra/helm/recsys-ci/templates/jenkins-init-configmap.yaml"
+    ).read_text(encoding="utf-8")
+    values = (ROOT / "infra/helm/recsys-ci/values.yaml").read_text(encoding="utf-8")
+
+    assert 'branchSpec: "*/main"' in values
+    assert 'def mainBranchSpec = "*/main"' in seed
+    assert "scriptPath, branchSpec))" in seed
+    assert seed.count("mainBranchSpec") >= 6
+    assert (
+        seed.count(
+            "<name>DEPLOY_PULL_REQUESTS</name>\n"
+            "              <defaultValue>false</defaultValue>"
+        )
+        == 2
+    )
+    assert "name: 'DEPLOY_PULL_REQUESTS', defaultValue: false" in (
+        ROOT / "Jenkinsfile"
+    ).read_text(encoding="utf-8")
+    root_pipeline = (ROOT / "Jenkinsfile").read_text(encoding="utf-8")
+    assert "RAG_SOURCE_RUN_ID" not in root_pipeline
+    assert "RAG_PIPELINE_RUN_ID" not in root_pipeline
+    assert "RAG_EXPECTED_ITEM_COUNT" not in root_pipeline
+    assert "<name>RAG_SOURCE_RUN_ID</name>" not in seed
+    assert "<name>RAG_PIPELINE_RUN_ID</name>" not in seed
+    assert "<name>RAG_EXPECTED_ITEM_COUNT</name>" not in seed
+    for job_name, view_name, forced_components in (
+        (
+            "RecSys-RAG-Data-Pipeline-CICD",
+            "01 RAG Data Pipeline",
+            "rag_index,rag_api,ci_config",
+        ),
+        (
+            "RecSys-Context-Agent-CICD",
+            "02 Context Agent",
+            "feature_rag_mcp,context_agent,ci_config",
+        ),
+        (
+            "RecSys-Recommendation-Agent-CICD",
+            "03 Recommendation Agent",
+            "recommendation_mcp,recommendation_agent,ci_config",
+        ),
+        (
+            "RecSys-Coordinator-Agent-CICD",
+            "04 Coordinator Agent",
+            "feature_rag_mcp,context_agent,recommendation_mcp,recommendation_agent,coordinator_agent,ci_config",
+        ),
+    ):
+        assert job_name in seed
+        assert view_name in seed
+        assert forced_components in seed
+    assert "def triggerProperty = githubTrigger" in seed
+    assert "${triggerProperty}" in seed
+    assert "def triggerBlock = githubTrigger" not in seed
+    assert "${triggerBlock}" not in seed
+
+
+def test_gcp_production_target_is_strict_and_self_consistent():
+    target = configuration.load_gcp_production()
+    assert target == {
+        "projectId": "owner-project",
+        "region": "asia-southeast1",
+        "zone": "asia-southeast1-b",
+        "cluster": "recsys-mlops-gke",
+        "context": "gke_owner-project_asia-southeast1-b_recsys-mlops-gke",
+        "imageRegistry": "asia-southeast1-docker.pkg.dev/owner-project/recsys",
+    }
+
+
+def test_component_ci_profiles_use_repo_locks():
+    profiles = configuration.load_ci_environments()
+    components = {
+        component["name"]: component for component in configuration.load_components()
+    }
+    assert set(profiles) == {
+        "data",
+        "ml",
+        "online-feature-api",
+        "inference-api",
+        "rag-api",
+        "agentic",
+        "recommendation-agentic",
+        "demo",
+        "analytics",
+    }
+    assert components["online_feature_api"]["ciProfile"] == "online-feature-api"
+    assert components["inference_api"]["ciProfile"] == "inference-api"
+    assert components["rag_api"]["ciProfile"] == "rag-api"
+    assert components["kserve"]["ciProfile"] == "ml"
+    for profile in profiles.values():
+        assert profile["lockFile"].endswith("/uv.lock")
+        assert (ROOT / profile["lockFile"]).is_file()
+        assert (ROOT / profile["projectPath"] / "pyproject.toml").is_file()
+
+
+def test_model_cd_ci_coverage_targets_the_split_package_modules():
+    expected_modules = {
+        "jenkins.python.model_cd.cli",
+        "jenkins.python.model_cd.config",
+        "jenkins.python.model_cd.helm_release",
+        "jenkins.python.model_cd.manifests",
+        "jenkins.python.model_cd.promotion_gates",
+    }
+    for relative_path in ("jenkins/scripts/ci/ml.sh", "jenkins/scripts/ci/serving.sh"):
+        source = (ROOT / relative_path).read_text(encoding="utf-8")
+        assert "cov_paths=(model_cd)" not in source
+        assert "jenkins/scripts:apps/" not in source
+        assert all(module in source for module in expected_modules)
+
+
+def test_external_ci_audits_use_bounded_retry():
+    completed = subprocess.run(
+        [
+            "bash",
+            "-c",
+            (
+                "source jenkins/scripts/lib/common.sh; "
+                "attempts=0; "
+                "flaky() { attempts=$((attempts + 1)); [[ $attempts -ge 3 ]]; }; "
+                "recsys_retry 3 0 flaky; "
+                'printf "%s" "$attempts"'
+            ),
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.stdout.endswith("3")
+    demo_ci = (ROOT / "jenkins/scripts/ci/demo.sh").read_text(encoding="utf-8")
+    assert demo_ci.count("CI_AUDIT_MAX_ATTEMPTS") == 3
+
+
+def test_kubernetes_name_helper_emits_rfc1123_label():
+    completed = subprocess.run(
+        [
+            "bash",
+            "-c",
+            (
+                "source jenkins/scripts/lib/common.sh; "
+                "recsys_kubernetes_name "
+                "'Airflow.Version-RecSys_GitHub-CICD-102-stream_online'"
+            ),
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.stdout == "airflow-version-recsys-github-cicd-102-stream-online"
+    assert re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", completed.stdout)
+
+
+def test_catalog_contains_only_supported_migration_policies():
+    payload = json.loads(
+        (ROOT / "jenkins/config/components.json").read_text(encoding="utf-8")
+    )
+    assert {component["migrationPolicy"] for component in payload["components"]} <= {
+        "none",
+        "expand-only",
+        "reversible",
+    }
+
+
+def test_catalog_driven_builder_owns_all_declared_images():
+    catalog = json.loads((ROOT / "images/catalog.json").read_text(encoding="utf-8"))
+    assert catalog["version"] == 1
+    assert "recsys-feature-rag-mcp" in catalog["images"]
+    assert {
+        "recsys-spark-runtime",
+        "recsys-spark-data",
+        "recsys-spark-analytics",
+        "recsys-spark-ml",
+    } <= catalog["images"].keys()
+    assert all(spec["context"] == "." for spec in catalog["images"].values())
+    engine = (ROOT / "jenkins/scripts/build/engine.sh").read_text(encoding="utf-8")
+    assert "image_catalog.py build-spec" in engine
+    assert "image_catalog.py dependencies" not in engine
+    assert "flock" not in engine
+    assert "build_reuse_shared_image" not in engine
+    assert "build_publish_image" in engine
+
+
+def test_locked_ml_images_match_exported_dependency_versions():
+    root_project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    root_lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
+    ml_project = (ROOT / "apps/ml-system/pyproject.toml").read_text(encoding="utf-8")
+    ml_lock = (ROOT / "apps/ml-system/uv.lock").read_text(encoding="utf-8")
+    assert '"gitpython==3.1.58"' in root_project
+    assert 'name = "gitpython"\nversion = "3.1.58"' in root_lock
+    assert '"gitpython==3.1.58"' in ml_project
+    assert 'name = "gitpython"\nversion = "3.1.58"' in ml_lock
+
+    spark_ml = (ROOT / "images/ml/recsys-spark-ml/Dockerfile").read_text(
+        encoding="utf-8"
+    )
+    assert "--constraint /tmp/" in spark_ml
+    assert "mlflow==" not in spark_ml
+    assert "cryptography==48.0.1" not in spark_ml
+
+    for relative_path in (
+        "images/ml/recsys-mlops-training/Dockerfile",
+        "images/ml/recsys-mlflow/Dockerfile",
+    ):
+        dockerfile = (ROOT / relative_path).read_text(encoding="utf-8")
+        assert "--constraint /tmp/" in dockerfile
+        assert "mlflow==3.15.1" in dockerfile
+        assert "mlflow==3.14.0" not in dockerfile
+        assert "cryptography==48.0.1" not in dockerfile
+
+    training = (ROOT / "images/ml/recsys-mlops-training/Dockerfile").read_text(
+        encoding="utf-8"
+    )
+    assert "aiohttp==3.14.3" in training
+    assert "ray_thirdparty" in training
+    assert '"${ray_thirdparty}"/aiohttp-*.dist-info' in training
+    assert '"${ray_thirdparty}/aiohttp-3.14.3.dist-info"' in training
+
+    airflow = (ROOT / "images/data/recsys-airflow/Dockerfile").read_text(
+        encoding="utf-8"
+    )
+    assert '"aiohttp==3.14.3"' in airflow
+    assert '"cryptography==50.0.0"' in airflow
+    assert '"aiohttp==3.13.3"' not in airflow
+    assert '"cryptography==49.0.0"' not in airflow
+
+
+def test_kubeflow_release_package_is_compiled_once_then_uploaded() -> None:
+    package_entrypoint = (
+        ROOT / "jenkins/scripts/entrypoints/release_package_artifacts.sh"
+    ).read_text(encoding="utf-8")
+    upload = (ROOT / "jenkins/scripts/deploy/upload_kfp_package.sh").read_text(
+        encoding="utf-8"
+    )
+    deploy = (ROOT / "jenkins/scripts/entrypoints/release_deploy_unit.sh").read_text(
+        encoding="utf-8"
+    )
+    deploy_runtime = (
+        ROOT / "jenkins/scripts/deploy/release_unit_runtime.sh"
+    ).read_text(encoding="utf-8")
+
+    assert package_entrypoint.count("jenkins/scripts/build/kfp_package.sh") == 1
+    assert "kfp_package.sh" not in upload
+    assert "compile_training_pipeline.py" not in upload
+    assert "release_unit_runtime.sh" in deploy
+    assert "upload_kfp_package.sh" in deploy_runtime
+    assert "kfp_version.sh" not in deploy_runtime
+
+
+def test_seed_jobs_do_not_expose_retired_registry_parameters() -> None:
+    seed = (
+        ROOT / "infra/helm/recsys-ci/templates/jenkins-init-configmap.yaml"
+    ).read_text(encoding="utf-8")
+    for parameter in (
+        "IMAGE_PUSH_REGISTRY",
+        "IMAGE_PULL_REGISTRY",
+        "REQUIRE_GCP_ARTIFACT_REGISTRY",
+        "DEPLOY_CHANGED_COMPONENTS",
+    ):
+        assert f"<name>{parameter}</name>" not in seed
+
+
+def test_prometheus_operator_is_pinned_and_operator_only():
+    source = (
+        ROOT / "infra/terraform/gcp/modules/kubernetes-platform/dependencies.tf"
+    ).read_text(encoding="utf-8")
+    assert 'resource "helm_release" "prometheus_operator"' in source
+    assert 'version          = "87.19.2"' in source
+    assert 'name  = "prometheus.enabled"' in source
+    assert 'name  = "prometheusOperator.enabled"' in source
+    assert 'name  = "prometheusOperator.tls.enabled"' in source
+
+
+def test_agent_deploy_uses_native_controller_lifecycle() -> None:
+    agentic = _deploy_bundle("agentic")
+    deploy = (ROOT / "jenkins/scripts/entrypoints/release_deploy_unit.sh").read_text(
+        encoding="utf-8"
+    )
+    deploy_runtime = (
+        ROOT / "jenkins/scripts/deploy/release_unit_runtime.sh"
+    ).read_text(encoding="utf-8")
+
+    assert "sandbox_agent_rebuild_golden_if_revision_changed" not in agentic
+    assert "sandbox_agent_model_revision" not in agentic
+    assert "delete actortemplate" not in agentic
+    assert "release_unit_runtime.sh" in deploy
+    assert "modelConfigDigest" not in deploy_runtime
+    assert "sandbox_agent_rebuild_golden_if_revision_changed" not in deploy_runtime
+
+
+def test_release_unit_runtime_dispatches_handlers_without_a_giant_case() -> None:
+    runtime = (ROOT / "jenkins/scripts/deploy/release_unit_runtime.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'handler="deploy_unit_${unit_name//-/_}"' in runtime
+    assert 'declare -F "${handler}"' in runtime
+    assert 'elif [[ "${unit_kind}" == "helm" ]]' in runtime
+    assert 'case "${unit_name}" in' not in runtime
+
+
+def test_release_unit_reuses_an_immutable_registry_image_for_new_chart_values() -> None:
+    runtime = (ROOT / "jenkins/scripts/deploy/release_unit_runtime.sh").read_text(
+        encoding="utf-8"
+    )
+    registry = (ROOT / "jenkins/scripts/lib/registry.sh").read_text(encoding="utf-8")
+
+    assert 'registry_resolve_latest_digest_reference "${image_name}"' in runtime
+    assert 'unit_image_fallback_paths+=("${value_c}")' in runtime
+    assert 'read_current_helm_value "${fallback_path}"' in runtime
+    assert "orderBy=UPDATE_TIME desc" in registry
+    assert 'item.get("uri", "").startswith(prefix)' in registry
+    assert "reusing latest immutable ${image_name} digest" in registry
+
+    deploy_config = json.loads(
+        (ROOT / "jenkins/config/deploy-units.json").read_text(encoding="utf-8")
+    )
+    airflow = next(unit for unit in deploy_config["units"] if unit["name"] == "airflow")
+    assert airflow["imageFallbackValues"] == {
+        "recsys-spark-data": ["images.spark"],
+        "recsys-spark-analytics": ["images.spark"],
+    }
+    analytics = next(
+        unit for unit in deploy_config["units"] if unit["name"] == "analytics"
+    )
+    assert analytics["components"] == ["analytics"]
+    assert analytics["requiresExplicitComponent"] is True
+
+
+def test_latest_registry_image_resolver_returns_only_the_digest() -> None:
+    digest = "a" * 64
+    script = rf"""
+set -Eeuo pipefail
+source jenkins/scripts/lib/common.sh
+source jenkins/scripts/lib/registry.sh
+gcp_production_field() {{
+  [[ "$1" == projectId ]] && printf recsys-project || printf asia-southeast1
+}}
+registry_gcp_access_token() {{ printf token; }}
+curl() {{
+  printf '%s\n' '{{"dockerImages":[{{"uri":"asia-southeast1-docker.pkg.dev/recsys-project/recsys/recsys-datahub-ops@sha256:{digest}"}}]}}'
+}}
+reference="$(registry_resolve_latest_digest_reference \
+  recsys-datahub-ops \
+  asia-southeast1-docker.pkg.dev/recsys-project/recsys)"
+[[ "$reference" == "asia-southeast1-docker.pkg.dev/recsys-project/recsys/recsys-datahub-ops@sha256:{digest}" ]]
+"""
+    subprocess.run(["bash", "-c", script], cwd=ROOT, check=True)
+
+
+def test_coordinator_release_verifier_uses_current_sandboxagent_schema() -> None:
+    verifier = (ROOT / "jenkins/scripts/test/agentic.sh").read_text(encoding="utf-8")
+
+    assert 'assert "platform" not in spec' in verifier
+    assert 'spec["platform"]' not in verifier
+    assert (
+        'spec["substrate"]["workerPoolRef"]["name"] '
+        '== "recsys-coordinator-sandbox-pool"'
+    ) in verifier
+    assert 'fallback["failureThreshold"] == 3' in verifier
+    assert 'fallback["replicas"] == 1' in verifier
+    assert 'fallback.get("behavior", "static") == "static"' in verifier
+    assert 'spec["fallback"] ==' not in verifier
+
+
+def test_agentic_loader_exports_legacy_regular_agent_removal_gate() -> None:
+    subprocess.run(
+        [
+            "bash",
+            "-c",
+            "source jenkins/scripts/deploy/agentic.sh; "
+            "declare -F agentic_wait_for_regular_agent_removal >/dev/null",
+        ],
+        cwd=ROOT,
+        check=True,
+    )
+
+
+def test_jenkins_allows_the_recovery_bootstrap_bundle_checkout() -> None:
+    values = (ROOT / "infra/helm/recsys-ci/values.yaml").read_text(encoding="utf-8")
+    assert "-Dhudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true" in values
+
+
+def test_gke_rollout_watcher_uses_a_published_immutable_image() -> None:
+    values = (ROOT / "infra/helm/recsys-ci/values-gke.yaml").read_text(encoding="utf-8")
+    assert "recsys-mlops-training:gcp" not in values
+    assert "recsys-mlops-training:a7ce4e4ec31e0fea5c1e4558c35012aee7b87cac" in values
